@@ -104,3 +104,9 @@
 
 ## Bug Fix
 - [x] Fix errore ESM/CommonJS in app.config.ts per build Android
+
+## Funzionalità Immagini
+- [x] Aggiungere pulsante per selezionare immagini dalla galleria
+- [x] Preview delle immagini selezionate nel form articolo
+- [x] Possibilità di rimuovere immagini selezionate
+- [x] Integrare immagini nell'invio email con Resend (come allegati)

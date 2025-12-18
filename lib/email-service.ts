@@ -3,11 +3,18 @@ import Constants from 'expo-constants';
 const RESEND_API_KEY = Constants.expoConfig?.extra?.resendApiKey || '';
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
+interface EmailAttachment {
+  filename: string;
+  content: string; // base64 encoded
+  type: string; // mime type
+}
+
 interface EmailOptions {
   to: string[];
   subject: string;
   html: string;
   from?: string;
+  attachments?: EmailAttachment[];
 }
 
 interface SendResult {
@@ -18,11 +25,18 @@ interface SendResult {
 }
 
 /**
- * Send emails using Resend API
- * Handles batching for large recipient lists
+ * Send emails using Resend API (legacy function without attachments)
  */
 export async function sendEmails(options: EmailOptions): Promise<SendResult> {
-  const { to, subject, html, from = 'Roberto Romagnino <g.ceo@growverse.net>' } = options;
+  return sendEmailsWithAttachments(options);
+}
+
+/**
+ * Send emails using Resend API with optional attachments
+ * Handles batching for large recipient lists
+ */
+export async function sendEmailsWithAttachments(options: EmailOptions): Promise<SendResult> {
+  const { to, subject, html, from = 'Roberto Romagnino <g.ceo@growverse.net>', attachments } = options;
   
   if (!RESEND_API_KEY) {
     return {
@@ -49,20 +63,33 @@ export async function sendEmails(options: EmailOptions): Promise<SendResult> {
     batches.push(to.slice(i, i + BATCH_SIZE));
   }
 
+  // Prepare attachments for Resend API format
+  const resendAttachments = attachments?.map(att => ({
+    filename: att.filename,
+    content: att.content, // Resend accepts base64 content directly
+  }));
+
   for (const batch of batches) {
     try {
+      const requestBody: any = {
+        from,
+        to: batch,
+        subject,
+        html,
+      };
+
+      // Add attachments if present
+      if (resendAttachments && resendAttachments.length > 0) {
+        requestBody.attachments = resendAttachments;
+      }
+
       const response = await fetch(RESEND_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${RESEND_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from,
-          to: batch,
-          subject,
-          html,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {

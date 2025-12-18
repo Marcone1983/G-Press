@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,7 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { sendEmails, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
+import { sendEmailsWithAttachments, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -51,6 +52,13 @@ interface Journalist {
   country: string;
   category: string;
   active: boolean;
+}
+
+interface SelectedImage {
+  uri: string;
+  base64?: string;
+  fileName: string;
+  mimeType: string;
 }
 
 const CATEGORIES = [
@@ -94,6 +102,9 @@ export default function HomeScreen() {
   const [contactEmail, setContactEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Images state
+  const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   
   const [journalists, setJournalists] = useState<Journalist[]>([]);
   const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
@@ -204,6 +215,49 @@ export default function HomeScreen() {
     }
   };
 
+  // Image picker functions
+  const pickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          "Permesso Negato",
+          "Per aggiungere immagini è necessario concedere l'accesso alla galleria."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        base64: true,
+        selectionLimit: 5 - selectedImages.length, // Max 5 images total
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages: SelectedImage[] = result.assets.map((asset, index) => ({
+          uri: asset.uri,
+          base64: asset.base64 || undefined,
+          fileName: asset.fileName || `image_${Date.now()}_${index}.jpg`,
+          mimeType: asset.mimeType || 'image/jpeg',
+        }));
+        
+        setSelectedImages(prev => [...prev, ...newImages].slice(0, 5));
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Errore", "Impossibile selezionare l'immagine");
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   // Combine and filter journalists
   const allJournalists = useMemo(() => {
     return [...customJournalists, ...journalists];
@@ -255,10 +309,11 @@ export default function HomeScreen() {
 
     const categoryLabel = CATEGORIES.find(c => c.value === category)?.label || "";
     const countryLabel = COUNTRIES.find(c => c.value === country)?.label || "";
+    const imageCount = selectedImages.length;
     
     Alert.alert(
       "Conferma Invio",
-      `Stai per inviare "${title}" a ${filteredCount} giornalisti.\n\nFiltri: ${categoryLabel}${country !== "all" ? `, ${countryLabel}` : ""}\n\nContinuare?`,
+      `Stai per inviare "${title}" a ${filteredCount} giornalisti.\n\nFiltri: ${categoryLabel}${country !== "all" ? `, ${countryLabel}` : ""}${imageCount > 0 ? `\n\nAllegati: ${imageCount} immagine/i` : ""}\n\nContinuare?`,
       [
         { text: "Annulla", style: "cancel" },
         {
@@ -284,6 +339,7 @@ export default function HomeScreen() {
                 recipientCount: filteredCount,
                 category: category,
                 country: country,
+                imageCount: imageCount,
               });
 
               // Check if Resend API is configured
@@ -307,17 +363,27 @@ export default function HomeScreen() {
                 contactEmail: contactEmail.trim(),
               });
 
-              const result = await sendEmails({
+              // Prepare attachments from selected images
+              const attachments = selectedImages
+                .filter(img => img.base64)
+                .map(img => ({
+                  filename: img.fileName,
+                  content: img.base64!,
+                  type: img.mimeType,
+                }));
+
+              const result = await sendEmailsWithAttachments({
                 to: emails,
                 subject: title.trim(),
                 html: htmlContent,
+                attachments: attachments.length > 0 ? attachments : undefined,
               });
 
               if (result.success) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 Alert.alert(
                   "✅ Invio Completato!",
-                  `Email inviata con successo a ${result.sent} giornalisti.`,
+                  `Email inviata con successo a ${result.sent} giornalisti.${imageCount > 0 ? `\n\n${imageCount} immagine/i allegata/e.` : ""}`,
                   [
                     {
                       text: "OK",
@@ -326,6 +392,7 @@ export default function HomeScreen() {
                         setSubtitle("");
                         setContent("");
                         setBoilerplate("");
+                        setSelectedImages([]);
                       },
                     },
                   ]
@@ -511,6 +578,52 @@ export default function HomeScreen() {
               {content.length} caratteri
             </ThemedText>
           </View>
+
+          {/* Images Section */}
+          <View style={styles.inputGroup}>
+            <ThemedText style={styles.inputLabel}>
+              📷 Immagini (opzionale)
+            </ThemedText>
+            <ThemedText style={styles.imageHint}>
+              Aggiungi fino a 5 immagini da allegare al comunicato
+            </ThemedText>
+            
+            {/* Image Preview Grid */}
+            {selectedImages.length > 0 && (
+              <View style={styles.imageGrid}>
+                {selectedImages.map((img, index) => (
+                  <View key={index} style={styles.imagePreviewContainer}>
+                    <Image
+                      source={{ uri: img.uri }}
+                      style={styles.imagePreview}
+                      contentFit="cover"
+                    />
+                    <Pressable
+                      style={styles.removeImageBtn}
+                      onPress={() => removeImage(index)}
+                    >
+                      <ThemedText style={styles.removeImageText}>✕</ThemedText>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            {/* Add Image Button */}
+            {selectedImages.length < 5 && (
+              <Pressable
+                style={styles.addImageBtn}
+                onPress={pickImage}
+              >
+                <ThemedText style={styles.addImageIcon}>📷</ThemedText>
+                <ThemedText style={styles.addImageText}>
+                  {selectedImages.length === 0 
+                    ? "Aggiungi Immagini" 
+                    : `Aggiungi Altre (${5 - selectedImages.length} rimanenti)`}
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* Additional Info Card */}
@@ -653,6 +766,7 @@ export default function HomeScreen() {
                 <ThemedText style={styles.sendButtonIcon}>📤</ThemedText>
                 <ThemedText style={styles.sendButtonText}>
                   Invia a {filteredCount.toLocaleString()} Giornalisti
+                  {selectedImages.length > 0 && ` (${selectedImages.length} 📷)`}
                 </ThemedText>
               </>
             )}
@@ -856,6 +970,66 @@ const styles = StyleSheet.create({
     color: "#9E9E9E",
     textAlign: "right",
     marginTop: 6,
+  },
+  
+  // Image Section
+  imageHint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+  },
+  imageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  imagePreviewContainer: {
+    position: "relative",
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  imagePreview: {
+    width: "100%",
+    height: "100%",
+  },
+  removeImageBtn: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  removeImageText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  addImageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0F7F0",
+    borderWidth: 2,
+    borderColor: "#C8E6C9",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    padding: 16,
+  },
+  addImageIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  addImageText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2E7D32",
   },
   
   // Contact Section
