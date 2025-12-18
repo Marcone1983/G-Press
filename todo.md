@@ -177,3 +177,32 @@
 - [ ] Separare funzionalità avanzate dalla home
 - [ ] Grafica pulita e non schiacciata
 
+
+## G-Press v4.0 - FUNZIONALITÀ GENIALI E INNOVATIVE
+
+### AUTOMAZIONE INTELLIGENTE:
+- [ ] **MEDIA KIT GENERATOR** - Genera automaticamente un media kit PDF professionale con logo, info azienda, comunicati recenti
+- [ ] **CALENDARIO EDITORIALE** - Pianifica comunicati stampa con vista calendario, reminder e deadline
+- [ ] **BLACKLIST AUTOMATICA** - Rimuove automaticamente chi si disiscrive o segnala spam
+- [ ] **WHITELIST VIP** - Giornalisti prioritari che ricevono sempre per primi (con anteprima esclusiva)
+
+### ANALYTICS AVANZATI:
+- [x] **HEATMAP APERTURE** - Mappa visuale di quando i giornalisti aprono (per ora e giorno)
+- [ ] **COMPETITOR TRACKING** - Traccia se i tuoi comunicati vengono pubblicati (cerca titolo su Google News)
+- [ ] **ROI CALCULATOR** - Calcola il valore PR generato (n. pubblicazioni x valore medio)
+- [ ] **EXPORT REPORT PDF** - Genera report mensile delle performance in PDF
+
+### GESTIONE CONTATTI PRO:
+- [ ] **IMPORT DA LINKEDIN** - Importa contatti giornalisti da LinkedIn (manuale con CSV)
+- [ ] **VERIFICA EMAIL** - Controlla se le email sono ancora valide prima dell'invio
+- [x] **NOTE GIORNALISTI** - Aggiungi note private su ogni giornalista (preferenze, interessi, ultimo contatto)
+- [x] **RELAZIONI** - Traccia le interazioni con ogni giornalista (email inviate, aperte, risposte)
+- [x] **VIP LIST** - Giornalisti prioritari evidenziati con badge dorato
+- [x] **BLACKLIST** - Blocca giornalisti che non vuoi più contattare
+
+### UX/COMFORT:
+- [ ] **DARK MODE** - Tema scuro per l'app
+- [x] **QUICK ACTIONS** - Azioni rapide dalla home (nuovo comunicato, ultimo template, gruppo preferito)
+- [ ] **WIDGET HOME SCREEN** - Widget per vedere statistiche rapide
+- [ ] **SHAKE TO UNDO** - Scuoti per annullare l'ultima azione
+

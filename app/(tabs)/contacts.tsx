@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,6 +29,9 @@ import journalistsData from "@/assets/data/journalists.json";
 
 const STORAGE_KEY = "gpress_custom_journalists";
 const TEMPLATES_KEY = "gpress_templates";
+const NOTES_KEY = "gpress_journalist_notes";
+const BLACKLIST_KEY = "gpress_blacklist";
+const VIP_KEY = "gpress_vip_list";
 
 interface Journalist {
   id: number;
@@ -39,6 +42,14 @@ interface Journalist {
   category: string;
   active: boolean;
   isCustom?: boolean;
+}
+
+interface JournalistNote {
+  email: string;
+  note: string;
+  tags: string[];
+  lastContact: string;
+  updatedAt: string;
 }
 
 const CATEGORIES = [
@@ -121,6 +132,15 @@ export default function ContactsScreen() {
   const [journalists, setJournalists] = useState<Journalist[]>([]);
   const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedJournalist, setSelectedJournalist] = useState<Journalist | null>(null);
+  
+  // Notes, Blacklist, VIP
+  const [notes, setNotes] = useState<Record<string, JournalistNote>>({});
+  const [blacklist, setBlacklist] = useState<string[]>([]);
+  const [vipList, setVipList] = useState<string[]>([]);
+  const [currentNote, setCurrentNote] = useState("");
+  const [currentTags, setCurrentTags] = useState("");
   
   // Form state for adding new journalist
   const [newName, setNewName] = useState("");
@@ -149,13 +169,67 @@ export default function ContactsScreen() {
       const customData = await AsyncStorage.getItem(STORAGE_KEY);
       const custom = customData ? JSON.parse(customData) : [];
       
+      // Load notes, blacklist, VIP
+      const notesData = await AsyncStorage.getItem(NOTES_KEY);
+      const blacklistData = await AsyncStorage.getItem(BLACKLIST_KEY);
+      const vipData = await AsyncStorage.getItem(VIP_KEY);
+      
       setJournalists(staticData);
       setCustomJournalists(custom);
+      setNotes(notesData ? JSON.parse(notesData) : {});
+      setBlacklist(blacklistData ? JSON.parse(blacklistData) : []);
+      setVipList(vipData ? JSON.parse(vipData) : []);
     } catch (error) {
       console.error("Error loading journalists:", error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Save note for journalist
+  const saveNote = async (email: string, note: string, tags: string) => {
+    const updatedNotes = {
+      ...notes,
+      [email]: {
+        email,
+        note,
+        tags: tags.split(",").map(t => t.trim()).filter(t => t),
+        lastContact: notes[email]?.lastContact || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(updatedNotes));
+    setNotes(updatedNotes);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Toggle blacklist
+  const toggleBlacklist = async (email: string) => {
+    const updated = blacklist.includes(email)
+      ? blacklist.filter(e => e !== email)
+      : [...blacklist, email];
+    await AsyncStorage.setItem(BLACKLIST_KEY, JSON.stringify(updated));
+    setBlacklist(updated);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  // Toggle VIP
+  const toggleVIP = async (email: string) => {
+    const updated = vipList.includes(email)
+      ? vipList.filter(e => e !== email)
+      : [...vipList, email];
+    await AsyncStorage.setItem(VIP_KEY, JSON.stringify(updated));
+    setVipList(updated);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  // Open journalist detail
+  const openJournalistDetail = (journalist: Journalist) => {
+    setSelectedJournalist(journalist);
+    const existingNote = notes[journalist.email];
+    setCurrentNote(existingNote?.note || "");
+    setCurrentTags(existingNote?.tags?.join(", ") || "");
+    setShowDetailModal(true);
   };
 
   const saveCustomJournalist = async () => {
@@ -359,64 +433,77 @@ export default function ContactsScreen() {
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredJournalists]);
 
-  const renderJournalist = ({ item }: { item: Journalist }) => (
-    <Pressable 
-      style={({ pressed }) => [
-        styles.journalistCard,
-        pressed && styles.journalistCardPressed,
-        item.isCustom && styles.customCard,
-      ]}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        const actions = item.isCustom 
-          ? [
-              { text: "Elimina", style: "destructive" as const, onPress: () => deleteCustomJournalist(item.id) },
-              { text: "OK" }
-            ]
-          : [{ text: "OK" }];
-        
-        Alert.alert(
-          item.name,
-          `📧 ${item.email}\n📰 ${item.outlet || "N/A"}\n🌍 ${COUNTRY_FLAGS[item.country] || "🌍"} ${item.country || "N/A"}\n🏷️ ${item.category}${item.isCustom ? "\n⭐ Aggiunto manualmente" : ""}`,
-          actions
-        );
-      }}
-    >
-      <View style={styles.cardLeft}>
-        <View style={[
-          styles.avatar, 
-          { backgroundColor: item.isCustom ? "#FF9800" : (CATEGORY_COLORS[item.category] || "#607D8B") }
-        ]}>
-          <ThemedText style={styles.avatarText}>
-            {item.name?.charAt(0)?.toUpperCase() || "?"}
-          </ThemedText>
-        </View>
-      </View>
-      <View style={styles.cardContent}>
-        <View style={styles.cardHeader}>
-          <ThemedText style={styles.journalistName} numberOfLines={1}>
-            {item.isCustom ? "⭐ " : ""}{item.name || item.outlet}
-          </ThemedText>
-          <ThemedText style={styles.countryFlag}>
-            {COUNTRY_FLAGS[item.country] || "🌍"}
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.journalistOutlet} numberOfLines={1}>
-          {item.outlet || "Freelance"}
-        </ThemedText>
-        <View style={styles.cardFooter}>
-          <ThemedText style={styles.journalistEmail} numberOfLines={1}>
-            {item.email}
-          </ThemedText>
-          <View style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[item.category] || "#607D8B"}20` }]}>
-            <ThemedText style={[styles.categoryPillText, { color: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
-              {item.category}
+  const renderJournalist = ({ item }: { item: Journalist }) => {
+    const isVIP = vipList.includes(item.email);
+    const isBlacklisted = blacklist.includes(item.email);
+    const hasNote = notes[item.email]?.note;
+    
+    return (
+      <Pressable 
+        style={({ pressed }) => [
+          styles.journalistCard,
+          pressed && styles.journalistCardPressed,
+          item.isCustom && styles.customCard,
+          isBlacklisted && styles.blacklistedCard,
+          isVIP && styles.vipCard,
+        ]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          openJournalistDetail(item);
+        }}
+        onLongPress={() => {
+          if (item.isCustom) {
+            Alert.alert(
+              "Elimina contatto",
+              `Vuoi eliminare ${item.name}?`,
+              [
+                { text: "Annulla", style: "cancel" },
+                { text: "Elimina", style: "destructive", onPress: () => deleteCustomJournalist(item.id) },
+              ]
+            );
+          }
+        }}
+      >
+        <View style={styles.cardLeft}>
+          <View style={[
+            styles.avatar, 
+            { backgroundColor: isVIP ? "#FFD700" : isBlacklisted ? "#9E9E9E" : item.isCustom ? "#FF9800" : (CATEGORY_COLORS[item.category] || "#607D8B") }
+          ]}>
+            <ThemedText style={styles.avatarText}>
+              {isVIP ? "🌟" : item.name?.charAt(0)?.toUpperCase() || "?"}
             </ThemedText>
           </View>
         </View>
-      </View>
-    </Pressable>
-  );
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <ThemedText style={[styles.journalistName, isBlacklisted && styles.blacklistedText]} numberOfLines={1}>
+              {isVIP ? "🌟 " : ""}{item.isCustom ? "⭐ " : ""}{item.name || item.outlet}
+            </ThemedText>
+            <View style={styles.badgeRow}>
+              {hasNote && <ThemedText style={styles.noteBadge}>📝</ThemedText>}
+              {isBlacklisted && <ThemedText style={styles.blacklistBadge}>🚫</ThemedText>}
+              <ThemedText style={styles.countryFlag}>
+                {COUNTRY_FLAGS[item.country] || "🌍"}
+              </ThemedText>
+            </View>
+          </View>
+          <ThemedText style={[styles.journalistOutlet, isBlacklisted && styles.blacklistedText]} numberOfLines={1}>
+            {item.outlet || "Freelance"}
+          </ThemedText>
+          <View style={styles.cardFooter}>
+            <ThemedText style={[styles.journalistEmail, isBlacklisted && styles.blacklistedText]} numberOfLines={1}>
+              {item.email}
+            </ThemedText>
+            <View style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[item.category] || "#607D8B"}20` }]}>
+              <ThemedText style={[styles.categoryPillText, { color: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
+                {item.category}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>
@@ -654,6 +741,129 @@ export default function ContactsScreen() {
             <View style={{ height: 100 }} />
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Journalist Detail Modal */}
+      <Modal
+        visible={showDetailModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowDetailModal(false)}
+      >
+        <SafeAreaView style={styles.detailModalContainer}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setShowDetailModal(false)}>
+              <ThemedText style={styles.modalCancel}>Chiudi</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>Dettaglio Giornalista</ThemedText>
+            <View style={{ width: 60 }} />
+          </View>
+          
+          {selectedJournalist && (
+            <ScrollView>
+              <View style={styles.detailHeader}>
+                <View style={[
+                  styles.detailAvatar,
+                  { backgroundColor: vipList.includes(selectedJournalist.email) ? "#FFD700" : CATEGORY_COLORS[selectedJournalist.category] || "#607D8B" }
+                ]}>
+                  <ThemedText style={styles.detailAvatarText}>
+                    {vipList.includes(selectedJournalist.email) ? "🌟" : selectedJournalist.name?.charAt(0)?.toUpperCase() || "?"}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles.detailName}>{selectedJournalist.name}</ThemedText>
+                <ThemedText style={styles.detailOutlet}>{selectedJournalist.outlet || "Freelance"}</ThemedText>
+                <ThemedText style={styles.detailEmail}>{selectedJournalist.email}</ThemedText>
+                <ThemedText style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[selectedJournalist.category] || "#607D8B"}20`, marginTop: 8, paddingHorizontal: 12, paddingVertical: 6 }]}>
+                  <ThemedText style={[styles.categoryPillText, { color: CATEGORY_COLORS[selectedJournalist.category] || "#607D8B" }]}>
+                    {COUNTRY_FLAGS[selectedJournalist.country] || "🌍"} {selectedJournalist.country} • {selectedJournalist.category}
+                  </ThemedText>
+                </ThemedText>
+                
+                {/* VIP and Blacklist buttons */}
+                <View style={styles.detailActions}>
+                  <Pressable
+                    style={[
+                      styles.actionButton,
+                      vipList.includes(selectedJournalist.email) ? styles.vipButtonActive : styles.vipButton,
+                    ]}
+                    onPress={() => toggleVIP(selectedJournalist.email)}
+                  >
+                    <ThemedText style={{ fontSize: 16 }}>🌟</ThemedText>
+                    <ThemedText style={[styles.actionButtonText, { color: vipList.includes(selectedJournalist.email) ? "#000" : "#FF8F00" }]}>
+                      {vipList.includes(selectedJournalist.email) ? "VIP" : "Aggiungi VIP"}
+                    </ThemedText>
+                  </Pressable>
+                  
+                  <Pressable
+                    style={[
+                      styles.actionButton,
+                      blacklist.includes(selectedJournalist.email) ? styles.blacklistButtonActive : styles.blacklistButton,
+                    ]}
+                    onPress={() => toggleBlacklist(selectedJournalist.email)}
+                  >
+                    <ThemedText style={{ fontSize: 16 }}>🚫</ThemedText>
+                    <ThemedText style={[styles.actionButtonText, { color: blacklist.includes(selectedJournalist.email) ? "#FFF" : "#F44336" }]}>
+                      {blacklist.includes(selectedJournalist.email) ? "Blacklist" : "Blocca"}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+              
+              {/* Notes Section */}
+              <View style={styles.detailSection}>
+                <ThemedText style={styles.sectionTitle}>📝 Note e Relazione</ThemedText>
+                <TextInput
+                  style={styles.noteInput}
+                  placeholder="Aggiungi note su questo giornalista...\nEs: Preferisce essere contattato via email, interessato a tech e startup"
+                  placeholderTextColor="#999"
+                  value={currentNote}
+                  onChangeText={setCurrentNote}
+                  multiline
+                  numberOfLines={4}
+                />
+                <TextInput
+                  style={styles.tagsInput}
+                  placeholder="Tag (separati da virgola): tech, startup, finanza"
+                  placeholderTextColor="#999"
+                  value={currentTags}
+                  onChangeText={setCurrentTags}
+                />
+                <Pressable
+                  style={styles.saveNoteButton}
+                  onPress={() => {
+                    saveNote(selectedJournalist.email, currentNote, currentTags);
+                    Alert.alert("Salvato!", "Note e tag aggiornati");
+                  }}
+                >
+                  <ThemedText style={styles.saveNoteButtonText}>💾 Salva Note</ThemedText>
+                </Pressable>
+                {notes[selectedJournalist.email]?.updatedAt && (
+                  <ThemedText style={styles.lastContactText}>
+                    Ultimo aggiornamento: {new Date(notes[selectedJournalist.email].updatedAt).toLocaleDateString("it-IT")}
+                  </ThemedText>
+                )}
+              </View>
+              
+              {/* Stats Section if available */}
+              {notes[selectedJournalist.email]?.tags?.length > 0 && (
+                <View style={styles.detailSection}>
+                  <ThemedText style={styles.sectionTitle}>🏷️ Tag</ThemedText>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {notes[selectedJournalist.email].tags.map((tag, i) => (
+                      <View key={i} style={[styles.categoryPill, { backgroundColor: "#E8F5E9" }]}>
+                        <ThemedText style={[styles.categoryPillText, { color: "#2E7D32" }]}>
+                          {tag}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          )}
+        </SafeAreaView>
       </Modal>
     </ThemedView>
   );
@@ -997,5 +1207,151 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     color: "#1A1A1A",
+  },
+  
+  // VIP and Blacklist styles
+  blacklistedCard: {
+    opacity: 0.6,
+    backgroundColor: "#F5F5F5",
+  },
+  vipCard: {
+    borderWidth: 2,
+    borderColor: "#FFD700",
+  },
+  blacklistedText: {
+    textDecorationLine: "line-through",
+    color: "#9E9E9E",
+  },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  noteBadge: {
+    fontSize: 12,
+  },
+  blacklistBadge: {
+    fontSize: 12,
+  },
+  
+  // Detail Modal
+  detailModalContainer: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
+  },
+  detailHeader: {
+    alignItems: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  detailAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  detailAvatarText: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  detailName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  detailOutlet: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 4,
+  },
+  detailEmail: {
+    fontSize: 14,
+    color: "#43A047",
+    marginTop: 8,
+  },
+  detailActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+    marginTop: 16,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  vipButton: {
+    backgroundColor: "#FFF8E1",
+  },
+  vipButtonActive: {
+    backgroundColor: "#FFD700",
+  },
+  blacklistButton: {
+    backgroundColor: "#FFEBEE",
+  },
+  blacklistButtonActive: {
+    backgroundColor: "#F44336",
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  detailSection: {
+    backgroundColor: "#FFFFFF",
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  noteInput: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: "#1A1A1A",
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  tagsInput: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: "#1A1A1A",
+    marginTop: 12,
+  },
+  saveNoteButton: {
+    backgroundColor: "#43A047",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  saveNoteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  lastContactText: {
+    fontSize: 13,
+    color: "#999",
+    marginTop: 8,
+    textAlign: "center",
   },
 });

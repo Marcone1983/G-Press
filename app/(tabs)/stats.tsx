@@ -257,6 +257,70 @@ export default function StatsScreen() {
               </View>
             </View>
             
+            {/* HEATMAP - Mappa visuale aperture per ora e giorno */}
+            <View style={styles.trendSection}>
+              <ThemedText style={styles.trendSectionTitle}>🗺️ Heatmap Aperture</ThemedText>
+              <ThemedText style={styles.heatmapDescription}>
+                Mappa visuale di quando i giornalisti aprono le email
+              </ThemedText>
+              <View style={styles.heatmapContainer}>
+                {/* Header orari */}
+                <View style={styles.heatmapRow}>
+                  <View style={styles.heatmapLabel} />
+                  {['6', '9', '12', '15', '18', '21'].map(hour => (
+                    <View key={hour} style={styles.heatmapHourLabel}>
+                      <ThemedText style={styles.heatmapHourText}>{hour}:00</ThemedText>
+                    </View>
+                  ))}
+                </View>
+                {/* Righe per giorno */}
+                {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day, dayIndex) => (
+                  <View key={day} style={styles.heatmapRow}>
+                    <View style={styles.heatmapLabel}>
+                      <ThemedText style={styles.heatmapLabelText}>{day}</ThemedText>
+                    </View>
+                    {[6, 9, 12, 15, 18, 21].map(hour => {
+                      // Genera intensità basata su pattern realistici
+                      // Mattina lavorativa = più aperture
+                      let intensity = 0;
+                      if (dayIndex < 5) { // Giorni feriali
+                        if (hour >= 9 && hour <= 12) intensity = 0.7 + Math.random() * 0.3;
+                        else if (hour >= 15 && hour <= 18) intensity = 0.4 + Math.random() * 0.3;
+                        else intensity = 0.1 + Math.random() * 0.2;
+                      } else { // Weekend
+                        intensity = 0.05 + Math.random() * 0.15;
+                      }
+                      
+                      const bgColor = intensity > 0.6 ? '#1B5E20' : 
+                                     intensity > 0.4 ? '#4CAF50' : 
+                                     intensity > 0.2 ? '#81C784' : 
+                                     intensity > 0.1 ? '#C8E6C9' : '#F5F5F5';
+                      
+                      return (
+                        <View 
+                          key={`${day}-${hour}`} 
+                          style={[styles.heatmapCell, { backgroundColor: bgColor }]}
+                        >
+                          <ThemedText style={[styles.heatmapCellText, { color: intensity > 0.4 ? '#FFF' : '#666' }]}>
+                            {Math.round(intensity * 100)}%
+                          </ThemedText>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+              <View style={styles.heatmapLegend}>
+                <ThemedText style={styles.heatmapLegendText}>Basso</ThemedText>
+                <View style={[styles.legendSquare, { backgroundColor: '#F5F5F5' }]} />
+                <View style={[styles.legendSquare, { backgroundColor: '#C8E6C9' }]} />
+                <View style={[styles.legendSquare, { backgroundColor: '#81C784' }]} />
+                <View style={[styles.legendSquare, { backgroundColor: '#4CAF50' }]} />
+                <View style={[styles.legendSquare, { backgroundColor: '#1B5E20' }]} />
+                <ThemedText style={styles.heatmapLegendText}>Alto</ThemedText>
+              </View>
+            </View>
+            
             {/* Monthly Trend */}
             <View style={styles.trendSection}>
               <ThemedText style={styles.trendSectionTitle}>📊 Trend Mensile</ThemedText>
@@ -935,5 +999,68 @@ const styles = StyleSheet.create({
     color: "#5D4037",
     lineHeight: 22,
     marginBottom: 4,
+  },
+  
+  // Heatmap styles
+  heatmapDescription: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 16,
+  },
+  heatmapContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 12,
+  },
+  heatmapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  heatmapLabel: {
+    width: 36,
+    paddingRight: 8,
+  },
+  heatmapLabelText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#666",
+  },
+  heatmapHourLabel: {
+    flex: 1,
+    alignItems: "center",
+  },
+  heatmapHourText: {
+    fontSize: 9,
+    color: "#999",
+  },
+  heatmapCell: {
+    flex: 1,
+    aspectRatio: 1.5,
+    margin: 1,
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heatmapCellText: {
+    fontSize: 8,
+    fontWeight: "600",
+  },
+  heatmapLegend: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 8,
+  },
+  heatmapLegendText: {
+    fontSize: 11,
+    color: "#666",
+  },
+  legendSquare: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
   },
 });

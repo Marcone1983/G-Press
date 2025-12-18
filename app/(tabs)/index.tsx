@@ -634,6 +634,80 @@ export default function HomeScreen() {
           </View>
         </LinearGradient>
 
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsScroll}>
+            <Pressable
+              style={[styles.quickAction, { backgroundColor: '#E8F5E9' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Vai direttamente ai template
+                Alert.alert(
+                  '📝 Template Rapido',
+                  'Vai alla pagina Templates per usare un template pre-costruito',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
+              <ThemedText style={styles.quickActionIcon}>📝</ThemedText>
+              <ThemedText style={styles.quickActionText}>Nuovo Template</ThemedText>
+            </Pressable>
+            
+            <Pressable
+              style={[styles.quickAction, { backgroundColor: '#E3F2FD' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setShowGroupsModal(true);
+              }}
+            >
+              <ThemedText style={styles.quickActionIcon}>👥</ThemedText>
+              <ThemedText style={styles.quickActionText}>Carica Gruppo</ThemedText>
+            </Pressable>
+            
+            <Pressable
+              style={[styles.quickAction, { backgroundColor: '#FFF3E0' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Imposta filtro per VIP (top engagement)
+                Alert.alert(
+                  '🌟 Solo VIP',
+                  'Vai ai Contatti e filtra per giornalisti VIP con alto engagement',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
+              <ThemedText style={styles.quickActionIcon}>🌟</ThemedText>
+              <ThemedText style={styles.quickActionText}>Solo VIP</ThemedText>
+            </Pressable>
+            
+            <Pressable
+              style={[styles.quickAction, { backgroundColor: '#F3E5F5' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Imposta categoria tech
+                setCategory('technology');
+                Alert.alert('💻 Filtro Tech', 'Destinatari filtrati per categoria Tecnologia');
+              }}
+            >
+              <ThemedText style={styles.quickActionIcon}>💻</ThemedText>
+              <ThemedText style={styles.quickActionText}>Solo Tech</ThemedText>
+            </Pressable>
+            
+            <Pressable
+              style={[styles.quickAction, { backgroundColor: '#FFEBEE' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                // Imposta paese Italia
+                setCountry('IT');
+                Alert.alert('🇮🇹 Filtro Italia', 'Destinatari filtrati per Italia');
+              }}
+            >
+              <ThemedText style={styles.quickActionIcon}>🇮🇹</ThemedText>
+              <ThemedText style={styles.quickActionText}>Solo Italia</ThemedText>
+            </Pressable>
+          </ScrollView>
+        </View>
+
         {/* Filters Card */}
         <View style={styles.card}>
           <ThemedText style={styles.cardTitle}>🎯 Filtra Destinatari</ThemedText>
@@ -1610,6 +1684,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  
+  // Quick Actions
+  quickActionsContainer: {
+    marginBottom: 16,
+  },
+  quickActionsScroll: {
+    paddingHorizontal: 4,
+    gap: 10,
+  },
+  quickAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  quickActionIcon: {
+    fontSize: 18,
+  },
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
   },
   
   // Cards
