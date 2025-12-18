@@ -228,6 +228,74 @@ export async function getAggregateStats(): Promise<EmailStats> {
 }
 
 /**
+ * Get statistics grouped by recipient email
+ */
+export interface JournalistStats {
+  email: string;
+  total: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  lastSent?: string;
+}
+
+export async function getStatsByJournalist(): Promise<JournalistStats[]> {
+  const emails = await getEmailsList(200);
+  const statsMap = new Map<string, JournalistStats>();
+
+  for (const email of emails) {
+    if (!email.to || !Array.isArray(email.to)) continue;
+    
+    for (const recipient of email.to) {
+      if (!statsMap.has(recipient)) {
+        statsMap.set(recipient, {
+          email: recipient,
+          total: 0,
+          delivered: 0,
+          opened: 0,
+          clicked: 0,
+          bounced: 0,
+        });
+      }
+      
+      const stats = statsMap.get(recipient)!;
+      stats.total++;
+      
+      // Update last sent date
+      if (!stats.lastSent || email.created_at > stats.lastSent) {
+        stats.lastSent = email.created_at;
+      }
+      
+      switch (email.last_event) {
+        case 'delivered':
+          stats.delivered++;
+          break;
+        case 'opened':
+          stats.opened++;
+          stats.delivered++;
+          break;
+        case 'clicked':
+          stats.clicked++;
+          stats.opened++;
+          stats.delivered++;
+          break;
+        case 'bounced':
+          stats.bounced++;
+          break;
+      }
+    }
+  }
+
+  // Sort by open rate (descending)
+  return Array.from(statsMap.values()).sort((a, b) => {
+    const rateA = a.total > 0 ? a.opened / a.total : 0;
+    const rateB = b.total > 0 ? b.opened / b.total : 0;
+    return rateB - rateA;
+  });
+}
+
+/**
  * Format press release content as HTML email
  */
 export function formatPressReleaseEmail(params: {

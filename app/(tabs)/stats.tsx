@@ -17,26 +17,32 @@ import { ThemedView } from "@/components/themed-view";
 import {
   getAggregateStats,
   getEmailsList,
+  getStatsByJournalist,
   isEmailConfigured,
   EmailStats,
   EmailDetail,
+  JournalistStats,
 } from "@/lib/email-service";
 
 export default function StatsScreen() {
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [emails, setEmails] = useState<EmailDetail[]>([]);
+  const [journalistStats, setJournalistStats] = useState<JournalistStats[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'journalists'>('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, emailsData] = await Promise.all([
+      const [statsData, emailsData, journalistData] = await Promise.all([
         getAggregateStats(),
         getEmailsList(50),
+        getStatsByJournalist(),
       ]);
       setStats(statsData);
       setEmails(emailsData);
+      setJournalistStats(journalistData);
     } catch (error) {
       console.error("Error loading stats:", error);
     } finally {
@@ -153,10 +159,76 @@ export default function StatsScreen() {
           </View>
         </LinearGradient>
 
+        {/* Tab Switcher */}
+        <View style={styles.tabSwitcher}>
+          <Pressable
+            style={[styles.tabBtn, activeTab === 'overview' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <ThemedText style={[styles.tabBtnText, activeTab === 'overview' && styles.tabBtnTextActive]}>
+              📊 Panoramica
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.tabBtn, activeTab === 'journalists' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('journalists')}
+          >
+            <ThemedText style={[styles.tabBtnText, activeTab === 'journalists' && styles.tabBtnTextActive]}>
+              👤 Per Giornalista
+            </ThemedText>
+          </Pressable>
+        </View>
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2E7D32" />
             <ThemedText style={styles.loadingText}>Caricamento statistiche...</ThemedText>
+          </View>
+        ) : activeTab === 'journalists' ? (
+          /* Journalist Stats Tab */
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>🏆 Top Giornalisti per Engagement</ThemedText>
+            {journalistStats.length === 0 ? (
+              <ThemedText style={styles.emptyText}>Nessuna statistica disponibile</ThemedText>
+            ) : (
+              journalistStats.slice(0, 50).map((j, index) => {
+                const openRate = j.total > 0 ? ((j.opened / j.total) * 100).toFixed(0) : '0';
+                return (
+                  <View key={j.email} style={styles.journalistItem}>
+                    <View style={styles.journalistRank}>
+                      <ThemedText style={styles.journalistRankText}>
+                        {index < 3 ? ['🥇', '🥈', '🥉'][index] : `#${index + 1}`}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.journalistInfo}>
+                      <ThemedText style={styles.journalistEmail} numberOfLines={1}>
+                        {j.email}
+                      </ThemedText>
+                      <View style={styles.journalistMeta}>
+                        <ThemedText style={styles.journalistStat}>
+                          📧 {j.total} inviate
+                        </ThemedText>
+                        <ThemedText style={[styles.journalistStat, { color: '#2196F3' }]}>
+                          👁 {j.opened} aperte
+                        </ThemedText>
+                        <ThemedText style={[styles.journalistStat, { color: '#9C27B0' }]}>
+                          🔗 {j.clicked} click
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={[styles.openRateBadge, { 
+                      backgroundColor: parseInt(openRate) >= 50 ? '#E8F5E9' : parseInt(openRate) >= 25 ? '#FFF3E0' : '#FFEBEE' 
+                    }]}>
+                      <ThemedText style={[styles.openRateText, { 
+                        color: parseInt(openRate) >= 50 ? '#2E7D32' : parseInt(openRate) >= 25 ? '#E65100' : '#C62828' 
+                      }]}>
+                        {openRate}%
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         ) : (
           <>
@@ -450,5 +522,78 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 22,
+  },
+  tabSwitcher: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  tabBtnActive: {
+    backgroundColor: "#E8F5E9",
+  },
+  tabBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  tabBtnTextActive: {
+    color: "#2E7D32",
+  },
+  journalistItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  journalistRank: {
+    width: 40,
+    alignItems: "center",
+  },
+  journalistRankText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#666",
+  },
+  journalistInfo: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  journalistEmail: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  journalistMeta: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  journalistStat: {
+    fontSize: 12,
+    color: "#666",
+  },
+  openRateBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  openRateText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

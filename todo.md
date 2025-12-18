@@ -119,3 +119,8 @@
 - [x] Fix salvataggio paese nei contatti personalizzati (picker con tutti i paesi)
 - [x] Aggiunto paese Metaverso e Internazionale ai filtri
 - [ ] Aggiungere anteprima email prima dell'invio
+
+## Funzionalità Avanzate v1.3
+- [x] Anteprima email - vedere come apparirà l'email prima di inviarla (pulsante 👁 accanto a Invia)
+- [x] Gruppi di destinatari - salvare gruppi per invii ricorrenti (es. "Tech Italia", "Business USA")
+- [x] Statistiche per giornalista - vedere quali giornalisti aprono più spesso le email (tab "Per Giornalista")

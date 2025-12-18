@@ -32,6 +32,7 @@ import journalistsData from "@/assets/data/journalists.json";
 const STORAGE_KEY = "gpress_custom_journalists";
 const HISTORY_KEY = "gpress_sent_history";
 const TEMPLATES_KEY = "gpress_templates";
+const GROUPS_KEY = "gpress_saved_groups";
 
 interface Template {
   id: number;
@@ -42,6 +43,13 @@ interface Template {
   boilerplate: string;
   contactName: string;
   contactEmail: string;
+}
+
+interface SavedGroup {
+  id: number;
+  name: string;
+  journalistIds: number[];
+  createdAt: string;
 }
 
 interface Journalist {
@@ -125,15 +133,25 @@ export default function HomeScreen() {
   const [recipientSearch, setRecipientSearch] = useState("");
   const [useManualSelection, setUseManualSelection] = useState(false);
   
+  // Email preview state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  
+  // Groups state
+  const [savedGroups, setSavedGroups] = useState<SavedGroup[]>([]);
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [showSaveGroupModal, setShowSaveGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
 
-  // Load journalists and templates on mount
+  // Load journalists, templates and groups on mount
   useEffect(() => {
     loadJournalists();
     loadTemplates();
+    loadGroups();
   }, []);
 
   const loadTemplates = async () => {
@@ -143,6 +161,68 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error loading templates:", error);
     }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const data = await AsyncStorage.getItem(GROUPS_KEY);
+      if (data) setSavedGroups(JSON.parse(data));
+    } catch (error) {
+      console.error("Error loading groups:", error);
+    }
+  };
+
+  const saveGroup = async () => {
+    if (!groupName.trim()) {
+      Alert.alert("Errore", "Inserisci un nome per il gruppo");
+      return;
+    }
+    if (selectedJournalistIds.size === 0) {
+      Alert.alert("Errore", "Seleziona almeno un giornalista per creare un gruppo");
+      return;
+    }
+
+    const newGroup: SavedGroup = {
+      id: Date.now(),
+      name: groupName.trim(),
+      journalistIds: Array.from(selectedJournalistIds),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [...savedGroups, newGroup];
+    await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
+    setSavedGroups(updated);
+    setGroupName("");
+    setShowSaveGroupModal(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Salvato!", `Gruppo "${newGroup.name}" salvato con ${newGroup.journalistIds.length} giornalisti`);
+  };
+
+  const loadGroup = (group: SavedGroup) => {
+    setSelectedJournalistIds(new Set(group.journalistIds));
+    setUseManualSelection(true);
+    setShowGroupsModal(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const deleteGroup = async (id: number) => {
+    Alert.alert(
+      "Elimina Gruppo",
+      "Sei sicuro di voler eliminare questo gruppo?",
+      [
+        { text: "Annulla", style: "cancel" },
+        {
+          text: "Elimina",
+          style: "destructive",
+          onPress: async () => {
+            const updated = savedGroups.filter(g => g.id !== id);
+            await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(updated));
+            setSavedGroups(updated);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      ]
+    );
   };
 
   const saveTemplate = async () => {
@@ -603,6 +683,24 @@ export default function HomeScreen() {
             </ThemedText>
           </View>
           
+          {/* Groups buttons */}
+          <View style={styles.groupsRow}>
+            <Pressable
+              style={[styles.groupBtn, { backgroundColor: "#E3F2FD" }]}
+              onPress={() => setShowGroupsModal(true)}
+            >
+              <ThemedText style={[styles.groupBtnText, { color: "#1565C0" }]}>📁 Carica Gruppo ({savedGroups.length})</ThemedText>
+            </Pressable>
+            {selectedJournalistIds.size > 0 && (
+              <Pressable
+                style={[styles.groupBtn, { backgroundColor: "#E8F5E9" }]}
+                onPress={() => setShowSaveGroupModal(true)}
+              >
+                <ThemedText style={[styles.groupBtnText, { color: "#2E7D32" }]}>💾 Salva Gruppo</ThemedText>
+              </Pressable>
+            )}
+          </View>
+          
           {/* Recipients list preview - show first 5 */}
           {effectiveRecipients.length > 0 ? (
             <View style={styles.recipientsList}>
@@ -957,13 +1055,204 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Groups Modal */}
+      <Modal
+        visible={showGroupsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowGroupsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>📁 Gruppi Salvati</ThemedText>
+              <Pressable onPress={() => setShowGroupsModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            {savedGroups.length === 0 ? (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <ThemedText style={{ fontSize: 48, marginBottom: 16 }}>📂</ThemedText>
+                <ThemedText style={{ fontSize: 16, color: "#666", textAlign: "center" }}>
+                  Nessun gruppo salvato.{"\n"}Seleziona dei giornalisti e salva un gruppo!
+                </ThemedText>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }}>
+                {savedGroups.map((group) => (
+                  <View key={group.id} style={styles.groupItem}>
+                    <View style={styles.groupInfo}>
+                      <ThemedText style={styles.groupName}>{group.name}</ThemedText>
+                      <ThemedText style={styles.groupCount}>{group.journalistIds.length} giornalisti</ThemedText>
+                    </View>
+                    <View style={styles.groupActions}>
+                      <Pressable
+                        style={[styles.groupActionBtn, { backgroundColor: "#E8F5E9" }]}
+                        onPress={() => loadGroup(group)}
+                      >
+                        <ThemedText style={{ color: "#2E7D32", fontWeight: "600" }}>✔ Usa</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.groupActionBtn, { backgroundColor: "#FFEBEE" }]}
+                        onPress={() => deleteGroup(group.id)}
+                      >
+                        <ThemedText style={{ color: "#C62828", fontWeight: "600" }}>🗑</ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Save Group Modal */}
+      <Modal
+        visible={showSaveGroupModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSaveGroupModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>💾 Salva Gruppo</ThemedText>
+              <Pressable onPress={() => setShowSaveGroupModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            <View style={{ padding: 16 }}>
+              <ThemedText style={{ fontSize: 14, color: "#666", marginBottom: 16 }}>
+                Stai per salvare {selectedJournalistIds.size} giornalisti in un nuovo gruppo.
+              </ThemedText>
+              
+              <TextInput
+                style={styles.input}
+                placeholder="Nome del gruppo (es. Tech Italia, Business USA)"
+                placeholderTextColor="#9E9E9E"
+                value={groupName}
+                onChangeText={setGroupName}
+              />
+              
+              <Pressable
+                style={[styles.sendButton, { marginTop: 16 }]}
+                onPress={saveGroup}
+              >
+                <LinearGradient
+                  colors={["#1565C0", "#1976D2"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.sendButtonGradient}
+                >
+                  <ThemedText style={styles.sendButtonText}>💾 Salva Gruppo</ThemedText>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Email Preview Modal */}
+      <Modal
+        visible={showPreviewModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowPreviewModal(false)}
+      >
+        <View style={[styles.previewContainer, { paddingTop: insets.top }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText style={styles.modalTitle}>👁 Anteprima Email</ThemedText>
+            <Pressable onPress={() => setShowPreviewModal(false)}>
+              <ThemedText style={styles.modalClose}>✕</ThemedText>
+            </Pressable>
+          </View>
+          
+          <ScrollView style={{ flex: 1 }}>
+            <View style={styles.previewContent}>
+              <ThemedText style={styles.previewTitle}>{title || "[Titolo]"}</ThemedText>
+              {subtitle && <ThemedText style={styles.previewSubtitle}>{subtitle}</ThemedText>}
+              <ThemedText style={styles.previewBody}>{content || "[Contenuto del comunicato]"}</ThemedText>
+              
+              {boilerplate && (
+                <View style={styles.previewBoilerplate}>
+                  <ThemedText style={styles.previewBoilerplateTitle}>Chi siamo</ThemedText>
+                  <ThemedText style={styles.previewBoilerplateText}>{boilerplate}</ThemedText>
+                </View>
+              )}
+              
+              {(contactName || contactEmail) && (
+                <View style={styles.previewContact}>
+                  <ThemedText style={styles.previewContactTitle}>Contatti per la stampa</ThemedText>
+                  {contactName && <ThemedText style={styles.previewContactText}>{contactName}</ThemedText>}
+                  {contactEmail && <ThemedText style={[styles.previewContactText, { color: "#1565C0" }]}>{contactEmail}</ThemedText>}
+                </View>
+              )}
+              
+              {selectedImages.length > 0 && (
+                <View style={styles.previewImages}>
+                  <ThemedText style={styles.previewImagesTitle}>📎 Allegati ({selectedImages.length} immagini)</ThemedText>
+                  <View style={styles.previewImageRow}>
+                    {selectedImages.map((img, idx) => (
+                      <Image key={idx} source={{ uri: img.uri }} style={styles.previewImageThumb} />
+                    ))}
+                  </View>
+                </View>
+              )}
+              
+              <View style={styles.previewFooter}>
+                <ThemedText style={styles.previewFooterText}>
+                  Roberto Romagnino{"\n"}Founder & CEO{"\n"}GROWVERSE, LLC{"\n\n"}Inviato con G-Press - Distribuzione Comunicati Stampa
+                </ThemedText>
+              </View>
+            </View>
+          </ScrollView>
+          
+          <View style={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16) }}>
+            <Pressable
+              style={styles.sendButton}
+              onPress={() => {
+                setShowPreviewModal(false);
+                handleSend();
+              }}
+              disabled={sending || filteredCount === 0}
+            >
+              <LinearGradient
+                colors={filteredCount === 0 ? ["#BDBDBD", "#9E9E9E"] : ["#2E7D32", "#43A047"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sendButtonGradient}
+              >
+                <ThemedText style={styles.sendButtonText}>
+                  📤 Invia a {filteredCount.toLocaleString()} Giornalisti
+                </ThemedText>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating Send Button */}
       <View
         style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}
       >
+        {/* Preview button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.previewButton,
+            pressed && { opacity: 0.8 },
+          ]}
+          onPress={() => setShowPreviewModal(true)}
+        >
+          <ThemedText style={styles.previewButtonText}>👁</ThemedText>
+        </Pressable>
+        
         <Pressable
           style={({ pressed }) => [
             styles.sendButton,
+            { flex: 1 },
             (sending || filteredCount === 0) && styles.sendButtonDisabled,
             pressed && styles.sendButtonPressed,
           ]}
@@ -1273,6 +1562,8 @@ const styles = StyleSheet.create({
   
   // Send Button
   buttonContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 12,
     backgroundColor: "#F8F9FA",
@@ -1553,5 +1844,169 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#43A047",
     marginTop: 2,
+  },
+  groupsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  groupBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  groupBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  groupItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  groupInfo: {
+    flex: 1,
+  },
+  groupName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  groupCount: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 4,
+  },
+  groupActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  groupActionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  previewContainer: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+  },
+  previewContent: {
+    backgroundColor: "#FFFFFF",
+    margin: 16,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  previewTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#2E7D32",
+    marginBottom: 8,
+  },
+  previewSubtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 16,
+  },
+  previewBody: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: "#333",
+    marginBottom: 20,
+  },
+  previewBoilerplate: {
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    paddingTop: 16,
+    marginTop: 16,
+  },
+  previewBoilerplateTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
+  previewBoilerplateText: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+  },
+  previewContact: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 16,
+  },
+  previewContactTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+  },
+  previewContactText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  previewFooter: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    alignItems: "center",
+  },
+  previewFooterText: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  previewImages: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    paddingTop: 16,
+  },
+  previewImagesTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 10,
+  },
+  previewImageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  previewImageThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  previewButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#E3F2FD",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  previewButtonText: {
+    fontSize: 24,
   },
 });
