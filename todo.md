@@ -101,3 +101,6 @@
 ## Configurazione Email Mittente
 - [x] Configurare email mittente: Roberto Romagnino <g.ceo@growverse.net>
 - [x] Aggiungere firma: Founder & CEO, GROWVERSE, LLC
+
+## Bug Fix
+- [x] Fix errore ESM/CommonJS in app.config.ts per build Android
