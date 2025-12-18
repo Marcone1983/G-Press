@@ -287,77 +287,56 @@ export default function HomeScreen() {
               });
 
               // Check if Resend API is configured
-              if (isEmailConfigured()) {
-                // Use Resend API for automatic sending
-                const htmlContent = formatPressReleaseEmail({
-                  title: title.trim(),
-                  subtitle: subtitle.trim(),
-                  content: content.trim(),
-                  boilerplate: boilerplate.trim(),
-                  contactName: contactName.trim(),
-                  contactEmail: contactEmail.trim(),
-                });
+              if (!isEmailConfigured()) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                Alert.alert(
+                  "❌ Errore Configurazione",
+                  "API Resend non configurata.\n\nContatta l'amministratore per configurare la chiave API.",
+                  [{ text: "OK" }]
+                );
+                return;
+              }
 
-                const result = await sendEmails({
-                  to: emails,
-                  subject: title.trim(),
-                  html: htmlContent,
-                });
+              // Use Resend API for automatic sending
+              const htmlContent = formatPressReleaseEmail({
+                title: title.trim(),
+                subtitle: subtitle.trim(),
+                content: content.trim(),
+                boilerplate: boilerplate.trim(),
+                contactName: contactName.trim(),
+                contactEmail: contactEmail.trim(),
+              });
 
-                if (result.success) {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  Alert.alert(
-                    "✅ Invio Completato!",
-                    `Email inviata con successo a ${result.sent} giornalisti.`,
-                    [
-                      {
-                        text: "OK",
-                        onPress: () => {
-                          setTitle("");
-                          setSubtitle("");
-                          setContent("");
-                          setBoilerplate("");
-                        },
+              const result = await sendEmails({
+                to: emails,
+                subject: title.trim(),
+                html: htmlContent,
+              });
+
+              if (result.success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                  "✅ Invio Completato!",
+                  `Email inviata con successo a ${result.sent} giornalisti.`,
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => {
+                        setTitle("");
+                        setSubtitle("");
+                        setContent("");
+                        setBoilerplate("");
                       },
-                    ]
-                  );
-                } else {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                  Alert.alert(
-                    "⚠️ Invio Parziale",
-                    `Inviate: ${result.sent}\nFallite: ${result.failed}\n\n${result.errors.join("\n")}`,
-                    [{ text: "OK" }]
-                  );
-                }
+                    },
+                  ]
+                );
               } else {
-                // Fallback to mailto for manual sending
-                let body = content.trim();
-                if (subtitle.trim()) {
-                  body = `${subtitle.trim()}\n\n${body}`;
-                }
-                if (boilerplate.trim()) {
-                  body += `\n\n---\n${boilerplate.trim()}`;
-                }
-                if (contactName.trim() || contactEmail.trim()) {
-                  body += `\n\nContatti:\n${contactName.trim()}${contactEmail.trim() ? ` - ${contactEmail.trim()}` : ""}`;
-                }
-                
-                const batchSize = 50;
-                const firstBatch = emails.slice(0, batchSize);
-                const mailtoUrl = `mailto:?bcc=${firstBatch.join(",")}&subject=${encodeURIComponent(title.trim())}&body=${encodeURIComponent(body)}`;
-                
-                const canOpen = await Linking.canOpenURL(mailtoUrl);
-                if (canOpen) {
-                  await Linking.openURL(mailtoUrl);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  Alert.alert(
-                    "Email Preparata",
-                    `L'app email si è aperta con ${Math.min(firstBatch.length, filteredCount)} destinatari.\n\nAPI Resend non configurata - usando client email.`,
-                    [{ text: "OK" }]
-                  );
-                } else {
-                  Alert.alert("Errore", "Impossibile aprire l'app email.");
-                }
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                Alert.alert(
+                  "⚠️ Invio Parziale",
+                  `Inviate: ${result.sent}\nFallite: ${result.failed}\n\n${result.errors.join("\n")}`,
+                  [{ text: "OK" }]
+                );
               }
             } catch (error: any) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

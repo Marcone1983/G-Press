@@ -90,6 +90,116 @@ export function isEmailConfigured(): boolean {
 }
 
 /**
+ * Get email statistics from Resend
+ */
+export interface EmailStats {
+  total: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  complained: number;
+}
+
+export interface EmailDetail {
+  id: string;
+  to: string[];
+  subject: string;
+  created_at: string;
+  last_event: string;
+}
+
+/**
+ * Get list of sent emails from Resend
+ */
+export async function getEmailsList(limit: number = 100): Promise<EmailDetail[]> {
+  if (!RESEND_API_KEY) return [];
+
+  try {
+    const response = await fetch(`https://api.resend.com/emails?limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error fetching emails list:', error);
+    return [];
+  }
+}
+
+/**
+ * Get details of a specific email
+ */
+export async function getEmailDetails(emailId: string): Promise<any> {
+  if (!RESEND_API_KEY) return null;
+
+  try {
+    const response = await fetch(`https://api.resend.com/emails/${emailId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return null;
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching email details:', error);
+    return null;
+  }
+}
+
+/**
+ * Calculate aggregate statistics from emails list
+ */
+export async function getAggregateStats(): Promise<EmailStats> {
+  const emails = await getEmailsList(100);
+  
+  const stats: EmailStats = {
+    total: emails.length,
+    delivered: 0,
+    opened: 0,
+    clicked: 0,
+    bounced: 0,
+    complained: 0,
+  };
+
+  for (const email of emails) {
+    switch (email.last_event) {
+      case 'delivered':
+        stats.delivered++;
+        break;
+      case 'opened':
+        stats.opened++;
+        stats.delivered++; // opened implies delivered
+        break;
+      case 'clicked':
+        stats.clicked++;
+        stats.opened++; // clicked implies opened
+        stats.delivered++;
+        break;
+      case 'bounced':
+        stats.bounced++;
+        break;
+      case 'complained':
+        stats.complained++;
+        break;
+    }
+  }
+
+  return stats;
+}
+
+/**
  * Format press release content as HTML email
  */
 export function formatPressReleaseEmail(params: {

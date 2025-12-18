@@ -90,3 +90,10 @@
 - [x] Configurare RESEND_API_KEY come variabile d'ambiente
 - [x] Implementare invio email automatico con Resend
 - [x] Fallback a mailto se API non configurata
+
+## Modifiche Richieste
+- [x] Rimuovere fallback mailto - mostrare errore se API non configurata
+- [x] Aggiungere dashboard statistiche Resend nell'app
+- [x] Visualizzare: email inviate, aperture, click, bounce
+- [x] Statistiche per singolo invio e totali
+- [x] Nuovo tab "Statistiche" con dashboard completa
