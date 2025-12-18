@@ -44,10 +44,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="knowledge"
         options={{
-          title: "Storico",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
+          title: "AI Journalist",
+          tabBarLabel: "AI",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-tools"
+        options={{
+          title: "AI Tools",
+          tabBarLabel: "Tools",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="wand.and.stars" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -58,11 +67,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="knowledge"
+        name="history"
         options={{
-          title: "AI Journalist",
-          tabBarLabel: "AI",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain" color={color} />,
+          title: "Storico",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
         }}
       />
     </Tabs>

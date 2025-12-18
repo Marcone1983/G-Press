@@ -17,23 +17,23 @@
 - [x] Sostituire logo con quello fornito dall'utente
 
 ## Da Implementare - Funzionalità Avanzate
-- [ ] Database giornalisti italiani pre-popolato (50+ contatti reali)
-- [ ] Categorie giornalisti (Tecnologia, Business, Finanza, Sport, etc.)
-- [ ] Filtro giornalisti per categoria/testata
-- [ ] Sistema invio email automatico con API (Resend)
-- [ ] Invio massivo in batch a tutti i contatti
-- [ ] Tracking aperture email
-- [ ] Analytics dashboard con statistiche invii
-- [ ] Import/Export contatti CSV
+- [x] Database giornalisti italiani pre-popolato (50+ contatti reali)
+- [x] Categorie giornalisti (Tecnologia, Business, Finanza, Sport, etc.)
+- [x] Filtro giornalisti per categoria/testata
+- [x] Sistema invio email automatico con API (Resend)
+- [x] Invio massivo in batch a tutti i contatti
+- [x] Tracking aperture email
+- [x] Analytics dashboard con statistiche invii
+- [x] Import/Export contatti CSV
 - [ ] Editor articolo avanzato con formattazione
-- [ ] Template comunicati stampa predefiniti
-- [ ] Boilerplate aziendale configurabile
+- [x] Template comunicati stampa predefiniti
+- [x] Boilerplate aziendale configurabile
 
 ## Infrastruttura MCP
 - [x] Creare repository GitHub per G-Press
 - [ ] Configurare Cloudflare D1 database
 - [ ] Setup Cloudflare Workers per API backend
-- [ ] Configurare Vercel per deployment frontend
+- [x] Configurare Vercel per deployment frontend
 
 ## Database Giornalisti Globale
 - [x] Giornalisti Italia (testate nazionali e regionali)
@@ -110,3 +110,63 @@
 - [x] Preview delle immagini selezionate nel form articolo
 - [x] Possibilità di rimuovere immagini selezionate
 - [x] Integrare immagini nell'invio email con Resend (come allegati)
+
+
+## G-Press v8.0 - FUNZIONALITÀ COMPLETE
+
+### AUTO-FOLLOW-UP:
+- [x] **SEQUENZA AUTOMATICA** - Se giornalista non apre entro X ore, invia follow-up
+- [x] **CONFIGURAZIONE TEMPI** - Imposta intervalli (24h, 48h, 72h)
+- [x] **TEMPLATE FOLLOW-UP** - Template diversi per ogni step
+- [x] **STOP SU APERTURA** - Ferma sequenza se apre l'email
+
+### IMPORT LINKEDIN CSV:
+- [x] **UPLOAD CSV** - Carica export LinkedIn Connections
+- [x] **PARSING AUTOMATICO** - Estrai nome, email, azienda, ruolo
+- [x] **DEDUPLICA** - Evita contatti duplicati
+- [x] **CATEGORIZZAZIONE** - Assegna categoria automatica
+
+### VERIFICA EMAIL:
+- [x] **VALIDAZIONE SINTASSI** - Controlla formato email
+- [x] **VERIFICA MX** - Controlla se dominio accetta email
+- [x] **BOUNCE TRACKING** - Traccia email rimbalzate
+- [x] **AUTO-RIMOZIONE** - Rimuovi email non valide
+
+### AUTO-TIMING:
+- [x] **ANALISI APERTURE** - Analizza quando giornalisti aprono
+- [x] **SUGGERIMENTO ORARIO** - Suggerisci orario migliore per invio
+- [x] **INVIO PROGRAMMATO** - Schedula invio automatico
+- [x] **FUSI ORARI** - Considera timezone destinatari
+
+### STREAMING AI:
+- [x] **GENERAZIONE REAL-TIME** - Mostra testo mentre viene generato
+- [x] **EFFETTO TYPING** - Animazione carattere per carattere
+- [x] **PROGRESS BAR** - Indicatore avanzamento generazione
+
+### RICERCA SEMANTICA KB:
+- [x] **EMBEDDINGS** - Converti documenti in vettori
+- [x] **RICERCA INTELLIGENTE** - Trova documenti per significato
+- [x] **CONTESTO AUTOMATICO** - Seleziona parti rilevanti per AI
+
+### FACT-CHECKING AI:
+- [x] **VERIFICA DATI** - Controlla numeri e date citati
+- [x] **CROSS-REFERENCE** - Confronta con documenti originali
+- [x] **ALERT INCONSISTENZE** - Segnala possibili errori
+
+### REVISIONE INLINE AI:
+- [x] **SUGGERIMENTI** - AI suggerisce miglioramenti
+- [x] **RISCRITTURA PARAGRAFI** - Riscrivi sezioni specifiche
+- [x] **TONO ADJUSTMENT** - Cambia tono (più formale/informale)
+
+### FINE-TUNING:
+- [x] **RACCOLTA ESEMPI** - Salva articoli approvati come training
+- [x] **UPLOAD TRAINING DATA** - Carica su OpenAI per fine-tuning
+- [x] **MODELLO PERSONALIZZATO** - Usa modello addestrato sul tuo stile
+- [x] **A/B TESTING** - Confronta modello base vs fine-tuned
+
+## Nuovo Tab AI Tools
+- [x] Ricerca Semantica nella Knowledge Base
+- [x] Fact-Checking AI con verifica affermazioni
+- [x] Revisione Inline con suggerimenti AI
+- [x] Generazione Streaming in tempo reale
+- [x] Fine-Tuning con raccolta esempi e gestione modelli

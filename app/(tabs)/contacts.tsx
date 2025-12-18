@@ -22,6 +22,7 @@ import * as FileSystem from "expo-file-system";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { importLinkedInCSV, verifyEmails } from "@/lib/vercel-api";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -107,6 +108,9 @@ export default function ContactsScreen() {
   const [newCountry, setNewCountry] = useState("");
   const [newCategory, setNewCategory] = useState("general");
   const [importing, setImporting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [showLinkedInModal, setShowLinkedInModal] = useState(false);
+  const [linkedInCSVContent, setLinkedInCSVContent] = useState("");
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -300,6 +304,93 @@ export default function ContactsScreen() {
     }
   };
 
+  // Import LinkedIn CSV function
+  const handleLinkedInImport = async () => {
+    if (!linkedInCSVContent.trim()) {
+      Alert.alert("Errore", "Incolla il contenuto del file CSV di LinkedIn");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const response = await importLinkedInCSV({
+        csvContent: linkedInCSVContent,
+        filterJournalistsOnly: true,
+      });
+
+      if (response.success && response.imported.length > 0) {
+        const newContacts: Journalist[] = response.imported.map((contact, i) => ({
+          id: Date.now() + i,
+          name: contact.name,
+          email: contact.email,
+          outlet: contact.outlet,
+          country: contact.country,
+          category: contact.category.toLowerCase(),
+          active: true,
+          isCustom: true,
+        }));
+
+        const updatedCustom = [...customJournalists, ...newContacts];
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
+        setCustomJournalists(updatedCustom);
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          "Importazione LinkedIn completata!",
+          `✅ ${response.imported.length} giornalisti importati\n⏭️ ${response.skipped.length} contatti saltati\n📂 Categorie: ${response.summary.categories.join(", ")}`
+        );
+        setShowLinkedInModal(false);
+        setLinkedInCSVContent("");
+      } else {
+        Alert.alert(
+          "Nessun giornalista trovato",
+          `${response.skipped.length} contatti non sono stati identificati come giornalisti.\nProva a disabilitare il filtro.`
+        );
+      }
+    } catch (error: any) {
+      Alert.alert("Errore", error.message || "Importazione fallita");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Verify emails function
+  const handleVerifyEmails = async () => {
+    const emailsToVerify = customJournalists.map(j => j.email);
+    
+    if (emailsToVerify.length === 0) {
+      Alert.alert("Nessun contatto", "Aggiungi prima dei contatti personalizzati da verificare");
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const response = await verifyEmails(emailsToVerify);
+
+      if (response.success) {
+        const invalidEmails = response.results
+          .filter(r => !r.valid)
+          .map(r => `• ${r.email}: ${r.reason}`);
+
+        if (invalidEmails.length === 0) {
+          Alert.alert(
+            "Verifica completata ✓",
+            `Tutti i ${response.summary.total} indirizzi email sono validi!`
+          );
+        } else {
+          Alert.alert(
+            "Verifica completata",
+            `✅ ${response.summary.valid} email valide\n❌ ${response.summary.invalid} email problematiche:\n\n${invalidEmails.slice(0, 5).join("\n")}${invalidEmails.length > 5 ? `\n...e altri ${invalidEmails.length - 5}` : ""}`
+          );
+        }
+      }
+    } catch (error: any) {
+      Alert.alert("Errore", error.message || "Verifica fallita");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   // Combine static and custom journalists
   const allJournalists = useMemo(() => {
     return [...customJournalists, ...journalists];
@@ -419,7 +510,22 @@ export default function ContactsScreen() {
               disabled={importing}
             >
               <ThemedText style={styles.addButtonText}>
-                {importing ? "..." : "📂 CSV"}
+                {importing ? "..." : "📂"}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.addButton}
+              onPress={() => setShowLinkedInModal(true)}
+            >
+              <ThemedText style={styles.addButtonText}>🔗</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.addButton, verifying && { opacity: 0.6 }]}
+              onPress={handleVerifyEmails}
+              disabled={verifying}
+            >
+              <ThemedText style={styles.addButtonText}>
+                {verifying ? "..." : "✓"}
               </ThemedText>
             </Pressable>
             <Pressable
@@ -429,7 +535,7 @@ export default function ContactsScreen() {
                 setShowAddModal(true);
               }}
             >
-              <ThemedText style={styles.addButtonText}>+ Aggiungi</ThemedText>
+              <ThemedText style={styles.addButtonText}>+</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -623,6 +729,60 @@ export default function ContactsScreen() {
                 ))}
               </View>
             </View>
+            
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* LinkedIn Import Modal */}
+      <Modal
+        visible={showLinkedInModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowLinkedInModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalContainer}
+        >
+          <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 20) }]}>
+            <Pressable onPress={() => setShowLinkedInModal(false)}>
+              <ThemedText style={styles.modalCancel}>Annulla</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>Import LinkedIn</ThemedText>
+            <Pressable onPress={handleLinkedInImport} disabled={importing}>
+              <ThemedText style={[styles.modalSave, importing && { opacity: 0.5 }]}>
+                {importing ? "..." : "Importa"}
+              </ThemedText>
+            </Pressable>
+          </View>
+          
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.linkedInInfo}>
+              <ThemedText style={styles.linkedInTitle}>🔗 Come esportare da LinkedIn</ThemedText>
+              <ThemedText style={styles.linkedInStep}>1. Vai su LinkedIn {">"}  Impostazioni</ThemedText>
+              <ThemedText style={styles.linkedInStep}>2. Ottieni una copia dei tuoi dati</ThemedText>
+              <ThemedText style={styles.linkedInStep}>3. Seleziona "Connections" e scarica</ThemedText>
+              <ThemedText style={styles.linkedInStep}>4. Apri il CSV e copia il contenuto qui sotto</ThemedText>
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Contenuto CSV *</ThemedText>
+              <TextInput
+                style={[styles.formInput, styles.csvInput]}
+                placeholder="Incolla qui il contenuto del file CSV di LinkedIn..."
+                placeholderTextColor="#999"
+                value={linkedInCSVContent}
+                onChangeText={setLinkedInCSVContent}
+                multiline
+                numberOfLines={10}
+              />
+            </View>
+            
+            <ThemedText style={styles.linkedInNote}>
+              ℹ️ Solo i contatti identificati come giornalisti verranno importati automaticamente.
+            </ThemedText>
             
             <View style={{ height: 100 }} />
           </ScrollView>
@@ -959,5 +1119,35 @@ const styles = StyleSheet.create({
   categoryOptionTextActive: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  
+  // LinkedIn Import
+  linkedInInfo: {
+    backgroundColor: "#E3F2FD",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  linkedInTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1565C0",
+    marginBottom: 12,
+  },
+  linkedInStep: {
+    fontSize: 14,
+    color: "#1976D2",
+    marginBottom: 6,
+    paddingLeft: 8,
+  },
+  linkedInNote: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 16,
+  },
+  csvInput: {
+    minHeight: 200,
+    textAlignVertical: "top",
   },
 });

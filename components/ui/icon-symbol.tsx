@@ -26,6 +26,8 @@ const MAPPING = {
   "checkmark.circle.fill": "check-circle",
   "chart.bar.fill": "bar-chart",
   "brain": "psychology",
+  "wand.and.stars": "auto-fix-high",
+  "gearshape.fill": "settings",
 } as IconMapping;
 
 /**
