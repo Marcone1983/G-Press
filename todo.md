@@ -63,3 +63,13 @@
 - [x] Estrarre nome ed email valide (1527 unici)
 - [x] Eliminare doppioni (5 duplicati rimossi)
 - [x] Caricare nel database (1522 nuovi contatti - Totale: 8.544)
+
+## Ricerca Dataset Giornalisti
+- [x] Cercare su GitHub dataset giornalisti/journalists
+- [x] Cercare su GitHub dataset press/media contacts
+- [x] Cercare su GitHub dataset news outlets/testate
+- [x] Cercare su Kaggle dataset giornalisti
+- [x] Cercare su data.world dataset media
+- [x] Analizzare e scaricare dataset trovati (US News Domains 5397, News Homepages 1167)
+- [x] Estrarre nome ed email valide (5975 contatti unici)
+- [x] Caricare nel database G-Press (totale: 8.546 contatti)
