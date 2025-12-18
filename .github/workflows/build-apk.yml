@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 16 # Usa Node.js 16 per compatibilità
+          node-version: 18 # Aggiornato a Node.js 18 per la compatibilità con pnpm
 
       - name: Install dependencies
         run: |
