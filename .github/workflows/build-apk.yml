@@ -18,22 +18,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Aggiornato a Node.js 18 per la compatibilità con pnpm
+          node-version: 18 # Usa Node.js 18 per la compatibilità con pnpm ed ES Module
 
       - name: Install dependencies
         run: |
-          npm install -g expo-cli pnpm
+          npm install -g pnpm
           pnpm install
 
       - name: Build APK
-        env:
-          EXPO_USERNAME: ${{ secrets.EXPO_USERNAME }}
-          EXPO_PASSWORD: ${{ secrets.EXPO_PASSWORD }}
         run: |
-          expo build:android --non-interactive
+          npx expo export --platform android
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
-          path: dist/app-release.apk # Path del file APK
+          path: dist/app-release.apk # Aggiorna con il path del file APK
