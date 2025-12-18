@@ -18,31 +18,36 @@ import {
   getAggregateStats,
   getEmailsList,
   getStatsByJournalist,
+  getJournalistScores,
   isEmailConfigured,
   EmailStats,
   EmailDetail,
   JournalistStats,
+  JournalistScore,
 } from "@/lib/email-service";
 
 export default function StatsScreen() {
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [emails, setEmails] = useState<EmailDetail[]>([]);
   const [journalistStats, setJournalistStats] = useState<JournalistStats[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'journalists'>('overview');
+  const [journalistScores, setJournalistScores] = useState<JournalistScore[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'journalists' | 'scores'>('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, emailsData, journalistData] = await Promise.all([
+      const [statsData, emailsData, journalistData, scoresData] = await Promise.all([
         getAggregateStats(),
         getEmailsList(50),
         getStatsByJournalist(),
+        getJournalistScores(),
       ]);
       setStats(statsData);
       setEmails(emailsData);
       setJournalistStats(journalistData);
+      setJournalistScores(scoresData);
     } catch (error) {
       console.error("Error loading stats:", error);
     } finally {
@@ -177,12 +182,71 @@ export default function StatsScreen() {
               👤 Per Giornalista
             </ThemedText>
           </Pressable>
+          <Pressable
+            style={[styles.tabBtn, activeTab === 'scores' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('scores')}
+          >
+            <ThemedText style={[styles.tabBtnText, activeTab === 'scores' && styles.tabBtnTextActive]}>
+              ⭐ Score
+            </ThemedText>
+          </Pressable>
         </View>
 
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2E7D32" />
             <ThemedText style={styles.loadingText}>Caricamento statistiche...</ThemedText>
+          </View>
+        ) : activeTab === 'scores' ? (
+          /* Journalist Scores Tab */
+          <View style={styles.card}>
+            <ThemedText style={styles.cardTitle}>⭐ Score Engagement Giornalisti</ThemedText>
+            <ThemedText style={styles.scoreDescription}>
+              Punteggio basato su aperture, click e attività recente. Usa questi dati per dare priorità ai giornalisti più coinvolti.
+            </ThemedText>
+            
+            {/* Tier Legend */}
+            <View style={styles.tierLegend}>
+              <View style={[styles.tierBadge, { backgroundColor: '#E8F5E9' }]}>
+                <ThemedText style={[styles.tierText, { color: '#2E7D32' }]}>🏆 Top (70+)</ThemedText>
+              </View>
+              <View style={[styles.tierBadge, { backgroundColor: '#E3F2FD' }]}>
+                <ThemedText style={[styles.tierText, { color: '#1565C0' }]}>👍 Good (50-69)</ThemedText>
+              </View>
+              <View style={[styles.tierBadge, { backgroundColor: '#FFF3E0' }]}>
+                <ThemedText style={[styles.tierText, { color: '#E65100' }]}>👌 Avg (30-49)</ThemedText>
+              </View>
+              <View style={[styles.tierBadge, { backgroundColor: '#FFEBEE' }]}>
+                <ThemedText style={[styles.tierText, { color: '#C62828' }]}>👎 Low (&lt;30)</ThemedText>
+              </View>
+            </View>
+            
+            {journalistScores.length === 0 ? (
+              <ThemedText style={styles.emptyText}>Nessuno score disponibile. Invia email per generare dati.</ThemedText>
+            ) : (
+              journalistScores.slice(0, 50).map((j, index) => {
+                const tierColor = j.tier === 'top' ? '#2E7D32' : j.tier === 'good' ? '#1565C0' : j.tier === 'average' ? '#E65100' : '#C62828';
+                const tierBg = j.tier === 'top' ? '#E8F5E9' : j.tier === 'good' ? '#E3F2FD' : j.tier === 'average' ? '#FFF3E0' : '#FFEBEE';
+                const tierEmoji = j.tier === 'top' ? '🏆' : j.tier === 'good' ? '👍' : j.tier === 'average' ? '👌' : '👎';
+                
+                return (
+                  <View key={j.email} style={styles.scoreItem}>
+                    <View style={styles.scoreRank}>
+                      <ThemedText style={styles.scoreRankText}>#{index + 1}</ThemedText>
+                    </View>
+                    <View style={styles.scoreInfo}>
+                      <ThemedText style={styles.scoreEmail} numberOfLines={1}>{j.email}</ThemedText>
+                      <ThemedText style={styles.scoreOpenRate}>Open Rate: {j.openRate.toFixed(0)}%</ThemedText>
+                    </View>
+                    <View style={[styles.scoreBadge, { backgroundColor: tierBg }]}>
+                      <ThemedText style={[styles.scoreValue, { color: tierColor }]}>
+                        {tierEmoji} {j.score}
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         ) : activeTab === 'journalists' ? (
           /* Journalist Stats Tab */
@@ -593,6 +657,75 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   openRateText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  
+  // Score Tab Styles
+  scoreDescription: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  tierLegend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  tierBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  tierText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  scoreItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  scoreRank: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E0E0E0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  scoreRankText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#666",
+  },
+  scoreInfo: {
+    flex: 1,
+  },
+  scoreEmail: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  scoreOpenRate: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  scoreBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    minWidth: 70,
+    alignItems: "center",
+  },
+  scoreValue: {
     fontSize: 14,
     fontWeight: "700",
   },

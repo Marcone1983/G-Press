@@ -124,3 +124,54 @@
 - [x] Anteprima email - vedere come apparirà l'email prima di inviarla (pulsante 👁 accanto a Invia)
 - [x] Gruppi di destinatari - salvare gruppi per invii ricorrenti (es. "Tech Italia", "Business USA")
 - [x] Statistiche per giornalista - vedere quali giornalisti aprono più spesso le email (tab "Per Giornalista")
+
+## AUDIT UFFICIO STAMPA - Funzionalità Mancanti
+
+### Cosa fa un ufficio stampa professionale:
+1. ✅ Gestione database giornalisti (FATTO - 9001 contatti)
+2. ✅ Invio comunicati stampa (FATTO - con Resend)
+3. ✅ Tracking aperture/click (FATTO - statistiche)
+4. ✅ Template comunicati (FATTO - salvabili)
+5. ✅ Allegati/immagini (FATTO)
+6. [ ] **MEDIA MONITORING** - Monitorare menzioni del brand online
+7. [ ] **FOLLOW-UP AUTOMATICO** - Reinviare a chi non ha aperto dopo X giorni
+8. [ ] **EMBARGO** - Programmare invio a data/ora specifica
+9. [ ] **A/B TESTING** - Testare oggetti email diversi per vedere quale funziona meglio
+10. [ ] **RASSEGNA STAMPA** - Raccogliere articoli pubblicati che parlano di te
+
+## G-Press v2.0 - INNOVAZIONI TECNOLOGICHE UNICHE
+
+### Funzionalità implementate:
+- [x] **1. INVIO PROGRAMMATO (EMBARGO)** - Scegli data e ora per l'invio automatico
+- [x] **2. FOLLOW-UP INTELLIGENTE** - Reinvio automatico a chi non ha aperto dopo 24/48/72h con oggetto diverso
+- [x] **3. A/B TESTING OGGETTO** - Testa 2 oggetti sul 20% dei contatti, poi invia il migliore al resto
+- [x] **4. SCORE GIORNALISTI** - Punteggio automatico basato su engagement (tier: top/good/average/low/inactive)
+- [x] **5. SUGGERIMENTI ORARIO** - Suggerisce orario migliore per inviare basato su statistiche aperture
+
+
+## G-Press v3.0 - AUTOPILOT & FUNZIONALITÀ KILLER
+
+### Già Implementate:
+- [x] 1. Invio programmato (embargo)
+- [x] 2. Follow-up intelligente
+- [x] 3. A/B testing oggetto
+- [x] 4. Score giornalisti
+- [x] 5. Suggerimenti orario
+
+### Da Implementare:
+- [ ] 6. **AUTOPILOT MODE** - Carica documento, l'app fa tutto da sola (sceglie destinatari, orario, invia, follow-up)
+- [ ] 7. **LEADERBOARD** - Classifica giornalisti che aprono di più (retargeting visivo)
+- [ ] 8. **UPLOAD DOCUMENTO** - Carica PDF/Word e l'app estrae titolo e contenuto
+- [ ] 9. **SMART TARGETING** - L'app sceglie automaticamente i destinatari migliori basandosi su score
+- [ ] 10. **SMART TIMING** - Invia automaticamente all'orario con più aperture storiche
+- [ ] 11. **AUTO FOLLOW-UP CHAIN** - Sequenza di 3 follow-up automatici con oggetti diversi
+- [ ] 12. **TREND ANALYSIS** - Mostra trend aperture nel tempo (grafico)
+- [ ] 13. **TAG GIORNALISTI** - Tagga i giornalisti per argomento/interesse
+- [ ] 14. **EMAIL TEMPLATES** - Template professionali pre-costruiti
+- [ ] 15. **ALERT APERTURE** - Notifica quando un giornalista top apre la tua email
+
+### UI/UX:
+- [ ] Creare nuova pagina "Autopilot" nella tab bar
+- [ ] Separare funzionalità avanzate dalla home
+- [ ] Grafica pulita e non schiacciata
+

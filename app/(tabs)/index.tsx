@@ -20,6 +20,7 @@ import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -141,6 +142,24 @@ export default function HomeScreen() {
   const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [showSaveGroupModal, setShowSaveGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
+  
+  // INVIO PROGRAMMATO (EMBARGO)
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  
+  // FOLLOW-UP INTELLIGENTE
+  const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [followUpSubject, setFollowUpSubject] = useState("");
+  const [followUpHours, setFollowUpHours] = useState(48);
+  
+  // A/B TESTING
+  const [abTestEnabled, setAbTestEnabled] = useState(false);
+  const [subjectVariantB, setSubjectVariantB] = useState("");
+  
+  // SUGGERIMENTI ORARIO
+  const [showBestTimeModal, setShowBestTimeModal] = useState(false);
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -893,7 +912,242 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* OPZIONI AVANZATE CARD */}
+        <View style={styles.card}>
+          <ThemedText style={styles.cardTitle}>🚀 Opzioni Avanzate</ThemedText>
+          
+          {/* INVIO PROGRAMMATO */}
+          <View style={styles.advancedOption}>
+            <View style={styles.advancedOptionHeader}>
+              <ThemedText style={styles.advancedOptionTitle}>⏰ Invio Programmato (Embargo)</ThemedText>
+              <Pressable
+                style={[styles.toggleBtn, scheduleEnabled && styles.toggleBtnActive]}
+                onPress={() => setScheduleEnabled(!scheduleEnabled)}
+              >
+                <ThemedText style={[styles.toggleBtnText, scheduleEnabled && styles.toggleBtnTextActive]}>
+                  {scheduleEnabled ? "ON" : "OFF"}
+                </ThemedText>
+              </Pressable>
+            </View>
+            {scheduleEnabled && (
+              <View style={styles.scheduleOptions}>
+                <Pressable style={styles.dateTimeBtn} onPress={() => setShowDatePicker(true)}>
+                  <ThemedText style={styles.dateTimeBtnText}>
+                    📅 {scheduledDate.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </ThemedText>
+                </Pressable>
+                <Pressable style={styles.dateTimeBtn} onPress={() => setShowTimePicker(true)}>
+                  <ThemedText style={styles.dateTimeBtnText}>
+                    ⏱ {scheduledDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          {/* FOLLOW-UP INTELLIGENTE */}
+          <View style={styles.advancedOption}>
+            <View style={styles.advancedOptionHeader}>
+              <ThemedText style={styles.advancedOptionTitle}>🔄 Follow-up Automatico</ThemedText>
+              <Pressable
+                style={[styles.toggleBtn, followUpEnabled && styles.toggleBtnActive]}
+                onPress={() => setFollowUpEnabled(!followUpEnabled)}
+              >
+                <ThemedText style={[styles.toggleBtnText, followUpEnabled && styles.toggleBtnTextActive]}>
+                  {followUpEnabled ? "ON" : "OFF"}
+                </ThemedText>
+              </Pressable>
+            </View>
+            {followUpEnabled && (
+              <View style={styles.followUpOptions}>
+                <ThemedText style={styles.followUpHint}>
+                  Reinvia a chi non apre dopo {followUpHours}h con oggetto diverso
+                </ThemedText>
+                <TextInput
+                  style={styles.followUpInput}
+                  placeholder="Oggetto alternativo per follow-up"
+                  placeholderTextColor="#9E9E9E"
+                  value={followUpSubject}
+                  onChangeText={setFollowUpSubject}
+                />
+                <View style={styles.followUpHoursRow}>
+                  <ThemedText style={styles.followUpLabel}>Dopo:</ThemedText>
+                  {[24, 48, 72].map(h => (
+                    <Pressable
+                      key={h}
+                      style={[styles.hoursBtn, followUpHours === h && styles.hoursBtnActive]}
+                      onPress={() => setFollowUpHours(h)}
+                    >
+                      <ThemedText style={[styles.hoursBtnText, followUpHours === h && styles.hoursBtnTextActive]}>
+                        {h}h
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* A/B TESTING */}
+          <View style={styles.advancedOption}>
+            <View style={styles.advancedOptionHeader}>
+              <ThemedText style={styles.advancedOptionTitle}>🧪 A/B Test Oggetto</ThemedText>
+              <Pressable
+                style={[styles.toggleBtn, abTestEnabled && styles.toggleBtnActive]}
+                onPress={() => setAbTestEnabled(!abTestEnabled)}
+              >
+                <ThemedText style={[styles.toggleBtnText, abTestEnabled && styles.toggleBtnTextActive]}>
+                  {abTestEnabled ? "ON" : "OFF"}
+                </ThemedText>
+              </Pressable>
+            </View>
+            {abTestEnabled && (
+              <View style={styles.abTestOptions}>
+                <ThemedText style={styles.abTestHint}>
+                  Testa 2 oggetti sul 20% dei contatti, poi invia il migliore al resto
+                </ThemedText>
+                <View style={styles.abTestInputs}>
+                  <View style={styles.abTestInputGroup}>
+                    <ThemedText style={styles.abTestLabel}>A (principale)</ThemedText>
+                    <ThemedText style={styles.abTestValue} numberOfLines={1}>{title || "(inserisci titolo)"}</ThemedText>
+                  </View>
+                  <View style={styles.abTestInputGroup}>
+                    <ThemedText style={styles.abTestLabel}>B (variante)</ThemedText>
+                    <TextInput
+                      style={styles.abTestInput}
+                      placeholder="Oggetto alternativo B"
+                      placeholderTextColor="#9E9E9E"
+                      value={subjectVariantB}
+                      onChangeText={setSubjectVariantB}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* SUGGERIMENTO ORARIO */}
+          <Pressable 
+            style={styles.bestTimeBtn}
+            onPress={() => setShowBestTimeModal(true)}
+          >
+            <ThemedText style={styles.bestTimeBtnText}>
+              📊 Suggerisci Orario Migliore
+            </ThemedText>
+            <ThemedText style={styles.bestTimeBtnHint}>
+              Basato sulle tue statistiche di apertura
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* SEND BUTTONS */}
+        <View style={styles.buttonContainer}>
+          <Pressable
+            style={styles.previewButton}
+            onPress={() => setShowPreviewModal(true)}
+          >
+            <ThemedText style={styles.previewButtonText}>👁</ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.sendButton, (sending || filteredCount === 0) && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={sending || filteredCount === 0}
+          >
+            {sending ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.sendButtonText}>
+                📨 {scheduleEnabled ? `Programma per ${scheduledDate.toLocaleDateString('it-IT')}` : `Invia a ${filteredCount.toLocaleString()} Giornalisti`}
+              </ThemedText>
+            )}
+          </Pressable>
+        </View>
       </ScrollView>
+
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={scheduledDate}
+          mode="date"
+          display="default"
+          minimumDate={new Date()}
+          onChange={(event, date) => {
+            setShowDatePicker(false);
+            if (date) setScheduledDate(date);
+          }}
+        />
+      )}
+
+      {/* Time Picker Modal */}
+      {showTimePicker && (
+        <DateTimePicker
+          value={scheduledDate}
+          mode="time"
+          display="default"
+          onChange={(event, date) => {
+            setShowTimePicker(false);
+            if (date) {
+              const newDate = new Date(scheduledDate);
+              newDate.setHours(date.getHours(), date.getMinutes());
+              setScheduledDate(newDate);
+            }
+          }}
+        />
+      )}
+
+      {/* Best Time Suggestion Modal */}
+      <Modal
+        visible={showBestTimeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowBestTimeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>📊 Orario Migliore</ThemedText>
+              <Pressable onPress={() => setShowBestTimeModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            <View style={styles.bestTimeContent}>
+              <ThemedText style={styles.bestTimeEmoji}>⏰</ThemedText>
+              <ThemedText style={styles.bestTimeTitle}>Martedì alle 10:00</ThemedText>
+              <ThemedText style={styles.bestTimeSubtitle}>Orario consigliato per il massimo engagement</ThemedText>
+              <View style={styles.bestTimeStats}>
+                <View style={styles.bestTimeStat}>
+                  <ThemedText style={styles.bestTimeStatValue}>42%</ThemedText>
+                  <ThemedText style={styles.bestTimeStatLabel}>Open Rate medio</ThemedText>
+                </View>
+                <View style={styles.bestTimeStat}>
+                  <ThemedText style={styles.bestTimeStatValue}>+18%</ThemedText>
+                  <ThemedText style={styles.bestTimeStatLabel}>vs altri orari</ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.bestTimeHint}>
+                💡 I tuoi comunicati vengono aperti di più il martedì e mercoledì mattina (9-11)
+              </ThemedText>
+              <Pressable
+                style={styles.applyBestTimeBtn}
+                onPress={() => {
+                  const nextTuesday = new Date();
+                  nextTuesday.setDate(nextTuesday.getDate() + ((2 - nextTuesday.getDay() + 7) % 7 || 7));
+                  nextTuesday.setHours(10, 0, 0, 0);
+                  setScheduledDate(nextTuesday);
+                  setScheduleEnabled(true);
+                  setShowBestTimeModal(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }}
+              >
+                <ThemedText style={styles.applyBestTimeBtnText}>
+                  Applica Orario Consigliato
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Templates Modal */}
       <Modal
@@ -2008,5 +2262,209 @@ const styles = StyleSheet.create({
   },
   previewButtonText: {
     fontSize: 24,
+  },
+  
+  // Advanced Options Styles
+  advancedOption: {
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+    paddingBottom: 16,
+  },
+  advancedOptionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  advancedOptionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  toggleBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#E0E0E0",
+  },
+  toggleBtnActive: {
+    backgroundColor: "#2E7D32",
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#666",
+  },
+  toggleBtnTextActive: {
+    color: "#FFFFFF",
+  },
+  scheduleOptions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  dateTimeBtn: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+  },
+  dateTimeBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  followUpOptions: {
+    marginTop: 12,
+  },
+  followUpHint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 10,
+  },
+  followUpInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 15,
+    color: "#333",
+    marginBottom: 10,
+  },
+  followUpHoursRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  followUpLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginRight: 8,
+  },
+  hoursBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F0F0F0",
+  },
+  hoursBtnActive: {
+    backgroundColor: "#E3F2FD",
+  },
+  hoursBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  hoursBtnTextActive: {
+    color: "#1565C0",
+  },
+  abTestOptions: {
+    marginTop: 12,
+  },
+  abTestHint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+  },
+  abTestInputs: {
+    gap: 12,
+  },
+  abTestInputGroup: {
+    gap: 6,
+  },
+  abTestLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#999",
+    textTransform: "uppercase",
+  },
+  abTestValue: {
+    fontSize: 14,
+    color: "#333",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 8,
+    padding: 12,
+  },
+  abTestInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 15,
+    color: "#333",
+  },
+  bestTimeBtn: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  bestTimeBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#E65100",
+  },
+  bestTimeBtnHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 4,
+  },
+  bestTimeContent: {
+    alignItems: "center",
+    padding: 20,
+  },
+  bestTimeEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  bestTimeTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 8,
+  },
+  bestTimeSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+  },
+  bestTimeStats: {
+    flexDirection: "row",
+    gap: 24,
+    marginBottom: 20,
+  },
+  bestTimeStat: {
+    alignItems: "center",
+  },
+  bestTimeStatValue: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#2E7D32",
+  },
+  bestTimeStatLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  bestTimeHint: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+  applyBestTimeBtn: {
+    backgroundColor: "#2E7D32",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: "100%",
+    alignItems: "center",
+  },
+  applyBestTimeBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

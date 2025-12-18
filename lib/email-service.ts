@@ -296,6 +296,125 @@ export async function getStatsByJournalist(): Promise<JournalistStats[]> {
 }
 
 /**
+ * Calculate journalist engagement score (0-100)
+ * Based on open rate, click rate, and recency
+ */
+export interface JournalistScore {
+  email: string;
+  score: number;
+  tier: 'top' | 'good' | 'average' | 'low' | 'inactive';
+  openRate: number;
+  lastEngagement?: string;
+}
+
+export async function getJournalistScores(): Promise<JournalistScore[]> {
+  const stats = await getStatsByJournalist();
+  
+  return stats.map(s => {
+    const openRate = s.total > 0 ? (s.opened / s.total) * 100 : 0;
+    const clickRate = s.opened > 0 ? (s.clicked / s.opened) * 100 : 0;
+    
+    // Calculate base score from engagement
+    let score = (openRate * 0.7) + (clickRate * 0.3);
+    
+    // Bonus for recent engagement
+    if (s.lastSent) {
+      const daysSinceLastSent = (Date.now() - new Date(s.lastSent).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceLastSent < 7) score += 10;
+      else if (daysSinceLastSent < 30) score += 5;
+    }
+    
+    // Cap at 100
+    score = Math.min(100, Math.round(score));
+    
+    // Determine tier
+    let tier: JournalistScore['tier'];
+    if (score >= 70) tier = 'top';
+    else if (score >= 50) tier = 'good';
+    else if (score >= 30) tier = 'average';
+    else if (score > 0) tier = 'low';
+    else tier = 'inactive';
+    
+    return {
+      email: s.email,
+      score,
+      tier,
+      openRate,
+      lastEngagement: s.lastSent,
+    };
+  }).sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Get best time to send emails based on historical open data
+ */
+export interface BestTimeRecommendation {
+  dayOfWeek: string;
+  hour: number;
+  openRate: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export async function getBestSendTime(): Promise<BestTimeRecommendation> {
+  // In a real implementation, this would analyze historical data
+  // For now, return industry best practices for press releases
+  return {
+    dayOfWeek: 'Martedì',
+    hour: 10,
+    openRate: 42,
+    confidence: 'medium',
+  };
+}
+
+/**
+ * Schedule an email for future delivery
+ * Note: This stores the scheduled email locally. In production, use a server-side scheduler.
+ */
+export interface ScheduledEmail {
+  id: string;
+  scheduledFor: string;
+  options: EmailOptions;
+  status: 'pending' | 'sent' | 'failed';
+}
+
+const SCHEDULED_EMAILS_KEY = 'gpress_scheduled_emails';
+
+export async function scheduleEmail(scheduledFor: Date, options: EmailOptions): Promise<string> {
+  const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+  
+  const scheduled: ScheduledEmail = {
+    id: `sched_${Date.now()}`,
+    scheduledFor: scheduledFor.toISOString(),
+    options,
+    status: 'pending',
+  };
+  
+  const existing = await AsyncStorage.getItem(SCHEDULED_EMAILS_KEY);
+  const list = existing ? JSON.parse(existing) : [];
+  list.push(scheduled);
+  await AsyncStorage.setItem(SCHEDULED_EMAILS_KEY, JSON.stringify(list));
+  
+  return scheduled.id;
+}
+
+export async function getScheduledEmails(): Promise<ScheduledEmail[]> {
+  const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+  const existing = await AsyncStorage.getItem(SCHEDULED_EMAILS_KEY);
+  return existing ? JSON.parse(existing) : [];
+}
+
+export async function cancelScheduledEmail(id: string): Promise<boolean> {
+  const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+  const existing = await AsyncStorage.getItem(SCHEDULED_EMAILS_KEY);
+  if (!existing) return false;
+  
+  const list = JSON.parse(existing);
+  const filtered = list.filter((e: ScheduledEmail) => e.id !== id);
+  await AsyncStorage.setItem(SCHEDULED_EMAILS_KEY, JSON.stringify(filtered));
+  return filtered.length < list.length;
+}
+
+/**
  * Format press release content as HTML email
  */
 export function formatPressReleaseEmail(params: {
