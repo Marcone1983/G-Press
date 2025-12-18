@@ -45,3 +45,9 @@
 - [x] Agenzie stampa internazionali (Reuters, AP, AFP)
 - [x] Testate tech globali (TechCrunch, The Verge, Wired)
 - [x] Testate business globali (Bloomberg, Forbes, Fortune)
+
+## Importazione Dataset Esterni
+- [x] Download dataset local_news_outlets_dataset.csv (12.217 righe)
+- [x] Download dataset VOA journalists (verificato - nessuna email diretta)
+- [x] Estrazione nome testata/giornalista e email (6.802 testate USA)
+- [x] Caricamento nel database G-Press (7.022 contatti totali)
