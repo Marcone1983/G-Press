@@ -30,7 +30,7 @@ jobs:
           npm run android:build || echo "Adjust your build command here"
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
-          path: "path/to/your/apk/folder/app-release.apk" # Cambia il path se è diverso
+          path: "path/to/your/apk/folder/app-release.apk" # Cambia il percorso se necessario
