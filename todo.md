@@ -80,3 +80,13 @@
 - [x] App funziona offline con dati locali (AsyncStorage)
 - [x] Storico invii salvato localmente
 - [ ] Configurare sistema invio email reale con Resend API (opzionale)
+
+## Prossimi Passi
+- [x] Importazione contatti da file CSV/Excel
+- [x] Template comunicati stampa salvabili e riutilizzabili
+- [x] Push su GitHub dopo ogni modifica
+
+## Configurazione Resend API
+- [x] Configurare RESEND_API_KEY come variabile d'ambiente
+- [x] Implementare invio email automatico con Resend
+- [x] Fallback a mailto se API non configurata

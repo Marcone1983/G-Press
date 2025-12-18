@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -25,6 +27,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import journalistsData from "@/assets/data/journalists.json";
 
 const STORAGE_KEY = "gpress_custom_journalists";
+const TEMPLATES_KEY = "gpress_templates";
 
 interface Journalist {
   id: number;
@@ -103,6 +106,7 @@ export default function ContactsScreen() {
   const [newOutlet, setNewOutlet] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [newCategory, setNewCategory] = useState("general");
+  const [importing, setImporting] = useState(false);
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -193,6 +197,107 @@ export default function ContactsScreen() {
         }
       ]
     );
+  };
+
+  // Import CSV function
+  const importCSV = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "application/csv", "text/*"],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      setImporting(true);
+      const file = result.assets[0];
+      
+      // Read file content
+      const content = await FileSystem.readAsStringAsync(file.uri);
+      const lines = content.split("\n").filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        Alert.alert("Errore", "Il file CSV deve contenere almeno un'intestazione e una riga di dati");
+        setImporting(false);
+        return;
+      }
+
+      // Parse header
+      const header = lines[0].toLowerCase().split(/[,;\t]/).map(h => h.trim().replace(/"/g, ""));
+      
+      // Find column indices
+      const nameIdx = header.findIndex(h => h.includes("nome") || h.includes("name"));
+      const emailIdx = header.findIndex(h => h.includes("email") || h.includes("mail"));
+      const outletIdx = header.findIndex(h => h.includes("testata") || h.includes("outlet") || h.includes("giornale") || h.includes("media"));
+      const countryIdx = header.findIndex(h => h.includes("paese") || h.includes("country") || h.includes("nazione"));
+      const categoryIdx = header.findIndex(h => h.includes("categoria") || h.includes("category") || h.includes("settore"));
+
+      if (emailIdx === -1) {
+        Alert.alert("Errore", "Il file CSV deve contenere una colonna 'email'");
+        setImporting(false);
+        return;
+      }
+
+      // Parse data rows
+      const newContacts: Journalist[] = [];
+      const existingEmails = new Set([...customJournalists, ...journalists].map(j => j.email.toLowerCase()));
+      let duplicates = 0;
+      let invalid = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(/[,;\t]/).map(v => v.trim().replace(/"/g, ""));
+        
+        const email = values[emailIdx]?.toLowerCase();
+        if (!email || !email.includes("@")) {
+          invalid++;
+          continue;
+        }
+
+        if (existingEmails.has(email)) {
+          duplicates++;
+          continue;
+        }
+
+        existingEmails.add(email);
+        newContacts.push({
+          id: Date.now() + i,
+          name: nameIdx >= 0 ? values[nameIdx] || email.split("@")[0] : email.split("@")[0],
+          email: email,
+          outlet: outletIdx >= 0 ? values[outletIdx] || "Importato" : "Importato",
+          country: countryIdx >= 0 ? values[countryIdx] || "Internazionale" : "Internazionale",
+          category: categoryIdx >= 0 ? values[categoryIdx]?.toLowerCase() || "general" : "general",
+          active: true,
+          isCustom: true,
+        });
+      }
+
+      if (newContacts.length === 0) {
+        Alert.alert(
+          "Nessun contatto importato",
+          `${duplicates} duplicati, ${invalid} email non valide`
+        );
+        setImporting(false);
+        return;
+      }
+
+      // Save to AsyncStorage
+      const updatedCustom = [...customJournalists, ...newContacts];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
+      setCustomJournalists(updatedCustom);
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Importazione completata!",
+        `✅ ${newContacts.length} nuovi contatti importati\n⏭️ ${duplicates} duplicati saltati\n❌ ${invalid} email non valide`
+      );
+    } catch (error: any) {
+      console.error("Import error:", error);
+      Alert.alert("Errore", "Impossibile importare il file: " + (error.message || "Errore sconosciuto"));
+    } finally {
+      setImporting(false);
+    }
   };
 
   // Combine static and custom journalists
@@ -307,15 +412,26 @@ export default function ContactsScreen() {
               {filteredJournalists.length.toLocaleString()} contatti • {customJournalists.length} personalizzati
             </ThemedText>
           </View>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setShowAddModal(true);
-            }}
-          >
-            <ThemedText style={styles.addButtonText}>+ Aggiungi</ThemedText>
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              style={[styles.addButton, importing && { opacity: 0.6 }]}
+              onPress={importCSV}
+              disabled={importing}
+            >
+              <ThemedText style={styles.addButtonText}>
+                {importing ? "..." : "📂 CSV"}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.addButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setShowAddModal(true);
+              }}
+            >
+              <ThemedText style={styles.addButtonText}>+ Aggiungi</ThemedText>
+            </Pressable>
+          </View>
         </View>
         
         {/* Search Bar */}
@@ -532,6 +648,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    gap: 8,
   },
   title: {
     fontSize: 28,

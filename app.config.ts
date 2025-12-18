@@ -20,6 +20,8 @@ const env = {
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
+  // Resend API key for email sending
+  resendApiKey: process.env.RESEND_API_KEY || '',
 };
 
 const config: ExpoConfig = {
@@ -85,6 +87,9 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  extra: {
+    resendApiKey: env.resendApiKey,
   },
 };
 

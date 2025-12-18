@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   View,
   Linking,
+  Modal,
+  FlatList,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -21,12 +23,25 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { sendEmails, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
 
 const STORAGE_KEY = "gpress_custom_journalists";
 const HISTORY_KEY = "gpress_sent_history";
+const TEMPLATES_KEY = "gpress_templates";
+
+interface Template {
+  id: number;
+  name: string;
+  title: string;
+  subtitle: string;
+  content: string;
+  boilerplate: string;
+  contactName: string;
+  contactEmail: string;
+}
 
 interface Journalist {
   id: number;
@@ -83,15 +98,92 @@ export default function HomeScreen() {
   const [journalists, setJournalists] = useState<Journalist[]>([]);
   const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
   
+  // Templates state
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
 
-  // Load journalists on mount
+  // Load journalists and templates on mount
   useEffect(() => {
     loadJournalists();
+    loadTemplates();
   }, []);
+
+  const loadTemplates = async () => {
+    try {
+      const data = await AsyncStorage.getItem(TEMPLATES_KEY);
+      if (data) setTemplates(JSON.parse(data));
+    } catch (error) {
+      console.error("Error loading templates:", error);
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (!templateName.trim()) {
+      Alert.alert("Errore", "Inserisci un nome per il template");
+      return;
+    }
+    if (!title.trim() && !content.trim()) {
+      Alert.alert("Errore", "Il template deve avere almeno un titolo o un contenuto");
+      return;
+    }
+
+    const newTemplate: Template = {
+      id: Date.now(),
+      name: templateName.trim(),
+      title: title.trim(),
+      subtitle: subtitle.trim(),
+      content: content.trim(),
+      boilerplate: boilerplate.trim(),
+      contactName: contactName.trim(),
+      contactEmail: contactEmail.trim(),
+    };
+
+    const updated = [...templates, newTemplate];
+    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+    setTemplates(updated);
+    setTemplateName("");
+    setShowSaveTemplateModal(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert("Salvato!", `Template "${newTemplate.name}" salvato con successo`);
+  };
+
+  const loadTemplate = (template: Template) => {
+    setTitle(template.title);
+    setSubtitle(template.subtitle);
+    setContent(template.content);
+    setBoilerplate(template.boilerplate);
+    setContactName(template.contactName);
+    setContactEmail(template.contactEmail);
+    setShowTemplatesModal(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const deleteTemplate = async (id: number) => {
+    Alert.alert(
+      "Elimina Template",
+      "Sei sicuro di voler eliminare questo template?",
+      [
+        { text: "Annulla", style: "cancel" },
+        {
+          text: "Elimina",
+          style: "destructive",
+          onPress: async () => {
+            const updated = templates.filter(t => t.id !== id);
+            await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+            setTemplates(updated);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      ]
+    );
+  };
 
   const loadJournalists = async () => {
     setIsLoading(true);
@@ -179,26 +271,6 @@ export default function HomeScreen() {
               // Get all emails
               const emails = filteredJournalists.map(j => j.email);
               
-              // Build email body
-              let body = content.trim();
-              if (subtitle.trim()) {
-                body = `${subtitle.trim()}\n\n${body}`;
-              }
-              if (boilerplate.trim()) {
-                body += `\n\n---\n${boilerplate.trim()}`;
-              }
-              if (contactName.trim() || contactEmail.trim()) {
-                body += `\n\nContatti:\n${contactName.trim()}${contactEmail.trim() ? ` - ${contactEmail.trim()}` : ""}`;
-              }
-              
-              // For large lists, we'll use BCC approach
-              // Most email clients support up to ~100 recipients in BCC
-              const batchSize = 50;
-              const batches = [];
-              for (let i = 0; i < emails.length; i += batchSize) {
-                batches.push(emails.slice(i, i + batchSize));
-              }
-              
               // Save to history first
               await saveToHistory({
                 id: Date.now(),
@@ -213,21 +285,30 @@ export default function HomeScreen() {
                 category: category,
                 country: country,
               });
-              
-              // Open email client with first batch
-              const firstBatch = batches[0];
-              const mailtoUrl = `mailto:?bcc=${firstBatch.join(",")}&subject=${encodeURIComponent(title.trim())}&body=${encodeURIComponent(body)}`;
-              
-              const canOpen = await Linking.canOpenURL(mailtoUrl);
-              if (canOpen) {
-                await Linking.openURL(mailtoUrl);
-                
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                
-                if (batches.length > 1) {
+
+              // Check if Resend API is configured
+              if (isEmailConfigured()) {
+                // Use Resend API for automatic sending
+                const htmlContent = formatPressReleaseEmail({
+                  title: title.trim(),
+                  subtitle: subtitle.trim(),
+                  content: content.trim(),
+                  boilerplate: boilerplate.trim(),
+                  contactName: contactName.trim(),
+                  contactEmail: contactEmail.trim(),
+                });
+
+                const result = await sendEmails({
+                  to: emails,
+                  subject: title.trim(),
+                  html: htmlContent,
+                });
+
+                if (result.success) {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                   Alert.alert(
-                    "Email Preparata",
-                    `L'app email si è aperta con ${firstBatch.length} destinatari.\n\nHai ${batches.length} gruppi da inviare (${filteredCount} totali).\n\nDopo aver inviato, torna qui per i prossimi gruppi.`,
+                    "✅ Invio Completato!",
+                    `Email inviata con successo a ${result.sent} giornalisti.`,
                     [
                       {
                         text: "OK",
@@ -241,24 +322,42 @@ export default function HomeScreen() {
                     ]
                   );
                 } else {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                   Alert.alert(
-                    "Email Preparata",
-                    `L'app email si è aperta con ${filteredCount} destinatari in BCC.\n\nInvia l'email per completare la distribuzione.`,
-                    [
-                      {
-                        text: "OK",
-                        onPress: () => {
-                          setTitle("");
-                          setSubtitle("");
-                          setContent("");
-                          setBoilerplate("");
-                        },
-                      },
-                    ]
+                    "⚠️ Invio Parziale",
+                    `Inviate: ${result.sent}\nFallite: ${result.failed}\n\n${result.errors.join("\n")}`,
+                    [{ text: "OK" }]
                   );
                 }
               } else {
-                Alert.alert("Errore", "Impossibile aprire l'app email. Verifica di avere un'app email configurata.");
+                // Fallback to mailto for manual sending
+                let body = content.trim();
+                if (subtitle.trim()) {
+                  body = `${subtitle.trim()}\n\n${body}`;
+                }
+                if (boilerplate.trim()) {
+                  body += `\n\n---\n${boilerplate.trim()}`;
+                }
+                if (contactName.trim() || contactEmail.trim()) {
+                  body += `\n\nContatti:\n${contactName.trim()}${contactEmail.trim() ? ` - ${contactEmail.trim()}` : ""}`;
+                }
+                
+                const batchSize = 50;
+                const firstBatch = emails.slice(0, batchSize);
+                const mailtoUrl = `mailto:?bcc=${firstBatch.join(",")}&subject=${encodeURIComponent(title.trim())}&body=${encodeURIComponent(body)}`;
+                
+                const canOpen = await Linking.canOpenURL(mailtoUrl);
+                if (canOpen) {
+                  await Linking.openURL(mailtoUrl);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  Alert.alert(
+                    "Email Preparata",
+                    `L'app email si è aperta con ${Math.min(firstBatch.length, filteredCount)} destinatari.\n\nAPI Resend non configurata - usando client email.`,
+                    [{ text: "OK" }]
+                  );
+                } else {
+                  Alert.alert("Errore", "Impossibile aprire l'app email.");
+                }
               }
             } catch (error: any) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -368,7 +467,23 @@ export default function HomeScreen() {
 
         {/* Press Release Form Card */}
         <View style={styles.card}>
-          <ThemedText style={styles.cardTitle}>📝 Comunicato Stampa</ThemedText>
+          <View style={styles.cardTitleRow}>
+            <ThemedText style={styles.cardTitle}>📝 Comunicato Stampa</ThemedText>
+            <View style={styles.templateButtons}>
+              <Pressable
+                style={styles.templateBtn}
+                onPress={() => setShowTemplatesModal(true)}
+              >
+                <ThemedText style={styles.templateBtnText}>📂 Carica</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.templateBtn, styles.templateBtnSave]}
+                onPress={() => setShowSaveTemplateModal(true)}
+              >
+                <ThemedText style={[styles.templateBtnText, { color: "#fff" }]}>💾 Salva</ThemedText>
+              </Pressable>
+            </View>
+          </View>
           
           {/* Title Input */}
           <View style={styles.inputGroup}>
@@ -462,6 +577,76 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Templates Modal */}
+      <Modal
+        visible={showTemplatesModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTemplatesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>📂 Template Salvati</ThemedText>
+              <Pressable onPress={() => setShowTemplatesModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {templates.length === 0 ? (
+                <ThemedText style={styles.emptyText}>Nessun template salvato</ThemedText>
+              ) : (
+                templates.map((template) => (
+                  <View key={template.id} style={styles.templateItem}>
+                    <Pressable
+                      style={styles.templateItemContent}
+                      onPress={() => loadTemplate(template)}
+                    >
+                      <ThemedText style={styles.templateItemName}>{template.name}</ThemedText>
+                      <ThemedText style={styles.templateItemPreview} numberOfLines={1}>
+                        {template.title || template.content.substring(0, 50)}
+                      </ThemedText>
+                    </Pressable>
+                    <Pressable onPress={() => deleteTemplate(template.id)}>
+                      <ThemedText style={styles.templateDelete}>🗑️</ThemedText>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Save Template Modal */}
+      <Modal
+        visible={showSaveTemplateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSaveTemplateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>💾 Salva Template</ThemedText>
+              <Pressable onPress={() => setShowSaveTemplateModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Nome del template"
+              placeholderTextColor="#9E9E9E"
+              value={templateName}
+              onChangeText={setTemplateName}
+            />
+            <Pressable style={styles.modalSaveBtn} onPress={saveTemplate}>
+              <ThemedText style={styles.modalSaveBtnText}>Salva Template</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Floating Send Button */}
       <View
@@ -591,6 +776,30 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A1A1A",
     marginBottom: 16,
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  templateButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  templateBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#F0F0F0",
+  },
+  templateBtnSave: {
+    backgroundColor: "#2E7D32",
+  },
+  templateBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#333",
   },
   
   // Filters
@@ -732,5 +941,86 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     letterSpacing: 0.3,
+  },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: "70%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  modalClose: {
+    fontSize: 24,
+    color: "#666",
+    padding: 4,
+  },
+  modalScroll: {
+    maxHeight: 300,
+  },
+  modalInput: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalSaveBtn: {
+    backgroundColor: "#2E7D32",
+    borderRadius: 10,
+    padding: 16,
+    alignItems: "center",
+  },
+  modalSaveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#999",
+    padding: 20,
+  },
+  templateItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  templateItemContent: {
+    flex: 1,
+  },
+  templateItemName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  templateItemPreview: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 4,
+  },
+  templateDelete: {
+    fontSize: 18,
+    padding: 8,
   },
 });
