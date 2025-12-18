@@ -1,1553 +1,824 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-  StyleSheet,
   View,
+  Text,
+  StyleSheet,
   ScrollView,
-  Pressable,
   TextInput,
+  Pressable,
   Modal,
   Alert,
   ActivityIndicator,
-  RefreshControl,
   FlatList,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
-import * as Haptics from "expo-haptics";
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import { generateArticle, checkApiHealth, type Document, type CompanyInfo, type ArticleFormat, type GeneratedArticle } from '@/lib/vercel-api';
 
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import {
-  KBDocument,
-  CompanyInfo,
-  GeneratedArticle,
-  ArticleRequest,
-  saveDocument,
-  getDocuments,
-  deleteDocument,
-  saveCompanyInfo,
-  getCompanyInfo,
-  generateArticle,
-  getGeneratedArticles,
-  updateArticleStatus,
-  deleteArticle,
-  getDocumentTypeLabel,
-  getFormatLabel,
-} from "@/lib/knowledge-base";
+const STORAGE_KEYS = {
+  DOCUMENTS: 'gpress_kb_documents',
+  COMPANY_INFO: 'gpress_kb_company',
+  ARTICLES: 'gpress_kb_articles',
+};
 
-type Tab = "documents" | "company" | "generate" | "articles";
+interface StoredDocument extends Document {
+  id: string;
+  uploadedAt: string;
+}
+
+interface StoredArticle extends GeneratedArticle {
+  id: string;
+  generatedAt: string;
+  format: ArticleFormat;
+  status: 'draft' | 'approved' | 'sent';
+}
 
 export default function KnowledgeScreen() {
-  const [activeTab, setActiveTab] = useState<Tab>("documents");
-  const [documents, setDocuments] = useState<KBDocument[]>([]);
-  const [articles, setArticles] = useState<GeneratedArticle[]>([]);
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  
-  // Modals
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showCompanyModal, setShowCompanyModal] = useState(false);
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [showArticlePreview, setShowArticlePreview] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<GeneratedArticle | null>(null);
-  
-  // Upload form
-  const [uploadName, setUploadName] = useState("");
-  const [uploadType, setUploadType] = useState<KBDocument["type"]>("other");
-  const [uploadContent, setUploadContent] = useState("");
-  
-  // Company form
-  const [companyForm, setCompanyForm] = useState<CompanyInfo>({
-    name: "",
-    description: "",
-    industry: "",
-    foundedYear: "",
-    headquarters: "",
-    website: "",
-    ceo: "",
-    keyProducts: [],
-    uniqueSellingPoints: [],
-    recentNews: [],
-    boilerplate: "",
-  });
-  const [productsInput, setProductsInput] = useState("");
-  const [uspInput, setUspInput] = useState("");
-  
-  // Generate form
-  const [generateRequest, setGenerateRequest] = useState<ArticleRequest>({
-    format: "news_brief",
-    tone: "neutral",
-    length: "medium",
-    topic: "",
-  });
-  
   const insets = useSafeAreaInsets();
+  
+  // State
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
+  const [articles, setArticles] = useState<StoredArticle[]>([]);
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>({
+    name: '',
+    ceo: '',
+    industry: '',
+    products: [],
+    strengths: [],
+  });
+  const [isApiHealthy, setIsApiHealthy] = useState<boolean | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<ArticleFormat>('news_brief');
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [showArticleModal, setShowArticleModal] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<StoredArticle | null>(null);
+  const [activeTab, setActiveTab] = useState<'documents' | 'articles' | 'settings'>('documents');
 
-  const loadData = useCallback(async () => {
-    try {
-      const [docs, arts, info] = await Promise.all([
-        getDocuments(),
-        getGeneratedArticles(),
-        getCompanyInfo(),
-      ]);
-      setDocuments(docs);
-      setArticles(arts);
-      setCompanyInfo(info);
-      if (info) {
-        setCompanyForm(info);
-        setProductsInput(info.keyProducts.join(", "));
-        setUspInput(info.uniqueSellingPoints.join(", "));
-      }
-    } catch (error) {
-      console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
+  // Load data on mount
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    checkHealth();
+  }, []);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    loadData();
-  }, [loadData]);
+  const checkHealth = async () => {
+    const healthy = await checkApiHealth();
+    setIsApiHealthy(healthy);
+  };
 
-  // Pick document
-  const handlePickDocument = async () => {
+  const loadData = async () => {
+    try {
+      const [docsJson, companyJson, articlesJson] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS),
+        AsyncStorage.getItem(STORAGE_KEYS.COMPANY_INFO),
+        AsyncStorage.getItem(STORAGE_KEYS.ARTICLES),
+      ]);
+      
+      if (docsJson) setDocuments(JSON.parse(docsJson));
+      if (companyJson) setCompanyInfo(JSON.parse(companyJson));
+      if (articlesJson) setArticles(JSON.parse(articlesJson));
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
+
+  const saveDocuments = async (docs: StoredDocument[]) => {
+    setDocuments(docs);
+    await AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
+  };
+
+  const saveCompanyInfo = async (info: CompanyInfo) => {
+    setCompanyInfo(info);
+    await AsyncStorage.setItem(STORAGE_KEYS.COMPANY_INFO, JSON.stringify(info));
+  };
+
+  const saveArticles = async (arts: StoredArticle[]) => {
+    setArticles(arts);
+    await AsyncStorage.setItem(STORAGE_KEYS.ARTICLES, JSON.stringify(arts));
+  };
+
+  const handleUploadDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/plain", "application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+        type: ['text/plain', 'application/pdf', 'application/msword'],
         copyToCacheDirectory: true,
       });
-      
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-        setUploadName(file.name.replace(/\.[^/.]+$/, ""));
-        
-        // Read file content
-        if (file.uri) {
-          try {
-            const content = await FileSystem.readAsStringAsync(file.uri);
-            setUploadContent(content);
-          } catch {
-            // For non-text files, use placeholder
-            setUploadContent(`[Contenuto del file: ${file.name}]\n\nInserisci qui il testo estratto dal documento.`);
-          }
-        }
-        
-        setShowUploadModal(true);
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      let content = '';
+
+      // Read file content
+      if (file.mimeType === 'text/plain') {
+        content = await FileSystem.readAsStringAsync(file.uri);
+      } else {
+        // For PDF/Word, we'd need a parser - for now just store metadata
+        content = `[File: ${file.name}] - Content extraction requires manual input`;
       }
-    } catch (error) {
-      console.error("Error picking document:", error);
-      Alert.alert("Errore", "Impossibile selezionare il documento");
-    }
-  };
 
-  // Save document
-  const handleSaveDocument = async () => {
-    if (!uploadName.trim() || !uploadContent.trim()) {
-      Alert.alert("Errore", "Inserisci nome e contenuto del documento");
-      return;
-    }
-    
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await saveDocument({
-        name: uploadName,
-        type: uploadType,
-        content: uploadContent,
-        fileSize: uploadContent.length,
-      });
-      
-      setShowUploadModal(false);
-      setUploadName("");
-      setUploadType("other");
-      setUploadContent("");
-      loadData();
-      
-      Alert.alert("Successo", "Documento aggiunto alla Knowledge Base!");
-    } catch (error) {
-      Alert.alert("Errore", "Impossibile salvare il documento");
-    }
-  };
-
-  // Save company info
-  const handleSaveCompanyInfo = async () => {
-    if (!companyForm.name.trim()) {
-      Alert.alert("Errore", "Inserisci almeno il nome dell'azienda");
-      return;
-    }
-    
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const updatedInfo: CompanyInfo = {
-        ...companyForm,
-        keyProducts: productsInput.split(",").map(p => p.trim()).filter(p => p),
-        uniqueSellingPoints: uspInput.split(",").map(u => u.trim()).filter(u => u),
+      const newDoc: StoredDocument = {
+        id: Date.now().toString(),
+        name: file.name,
+        category: 'general',
+        content: content.substring(0, 10000), // Limit content size
+        uploadedAt: new Date().toISOString(),
       };
-      
-      await saveCompanyInfo(updatedInfo);
-      setCompanyInfo(updatedInfo);
-      setShowCompanyModal(false);
-      
-      Alert.alert("Successo", "Informazioni aziendali salvate!");
+
+      await saveDocuments([...documents, newDoc]);
+      Alert.alert('Successo', 'Documento caricato!');
     } catch (error) {
-      Alert.alert("Errore", "Impossibile salvare le informazioni");
+      console.error('Error uploading document:', error);
+      Alert.alert('Errore', 'Impossibile caricare il documento');
     }
   };
 
-  // Generate article
-  const handleGenerateArticle = async () => {
-    if (documents.length === 0 && !companyInfo) {
-      Alert.alert("Attenzione", "Carica almeno un documento o configura le informazioni aziendali prima di generare articoli");
-      return;
-    }
-    
-    try {
-      setGenerating(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      
-      const article = await generateArticle(generateRequest);
-      
-      setShowGenerateModal(false);
-      setSelectedArticle(article);
-      setShowArticlePreview(true);
-      loadData();
-    } catch (error) {
-      Alert.alert("Errore", "Impossibile generare l'articolo");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Delete document
-  const handleDeleteDocument = (id: string, name: string) => {
-    Alert.alert(
-      "Elimina Documento",
-      `Vuoi eliminare "${name}" dalla Knowledge Base?`,
+  const handleAddManualDocument = () => {
+    Alert.prompt(
+      'Aggiungi Documento',
+      'Inserisci il contenuto del documento:',
       [
-        { text: "Annulla", style: "cancel" },
+        { text: 'Annulla', style: 'cancel' },
         {
-          text: "Elimina",
-          style: "destructive",
-          onPress: async () => {
-            await deleteDocument(id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            loadData();
+          text: 'Aggiungi',
+          onPress: async (content: string | undefined) => {
+            if (!content) return;
+            const newDoc: StoredDocument = {
+              id: Date.now().toString(),
+              name: `Documento ${documents.length + 1}`,
+              category: 'manual',
+              content,
+              uploadedAt: new Date().toISOString(),
+            };
+            await saveDocuments([...documents, newDoc]);
           },
         },
-      ]
+      ],
+      'plain-text'
     );
   };
 
-  // Approve article
-  const handleApproveArticle = async (article: GeneratedArticle) => {
-    await updateArticleStatus(article.id, "approved", { approvedAt: new Date().toISOString() });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Approvato!", "L'articolo è pronto per l'invio. Vai alla Home per inviarlo ai giornalisti.");
-    setShowArticlePreview(false);
-    loadData();
+  const handleDeleteDocument = async (id: string) => {
+    Alert.alert('Elimina', 'Sei sicuro?', [
+      { text: 'Annulla', style: 'cancel' },
+      {
+        text: 'Elimina',
+        style: 'destructive',
+        onPress: async () => {
+          await saveDocuments(documents.filter(d => d.id !== id));
+        },
+      },
+    ]);
   };
 
-  // Render document card
-  const renderDocumentCard = ({ item }: { item: KBDocument }) => (
-    <Pressable
-      style={styles.documentCard}
-      onLongPress={() => handleDeleteDocument(item.id, item.name)}
-    >
-      <View style={styles.docHeader}>
-        <View style={[styles.docTypeBadge, { backgroundColor: getDocTypeColor(item.type) }]}>
-          <ThemedText style={styles.docTypeText}>{getDocumentTypeLabel(item.type)}</ThemedText>
-        </View>
-        <ThemedText style={styles.docDate}>
-          {new Date(item.uploadedAt).toLocaleDateString("it-IT")}
-        </ThemedText>
-      </View>
-      <ThemedText style={styles.docName}>{item.name}</ThemedText>
-      <ThemedText style={styles.docSummary} numberOfLines={2}>
-        {item.summary}
-      </ThemedText>
-      <View style={styles.keywordsRow}>
-        {item.keywords.slice(0, 4).map((kw, i) => (
-          <View key={i} style={styles.keywordBadge}>
-            <ThemedText style={styles.keywordText}>{kw}</ThemedText>
-          </View>
-        ))}
-      </View>
-    </Pressable>
-  );
+  const handleGenerateArticle = async () => {
+    if (documents.length === 0) {
+      Alert.alert('Errore', 'Carica almeno un documento prima di generare un articolo');
+      return;
+    }
 
-  // Render article card
-  const renderArticleCard = ({ item }: { item: GeneratedArticle }) => (
-    <Pressable
-      style={styles.articleCard}
-      onPress={() => {
-        setSelectedArticle(item);
-        setShowArticlePreview(true);
-      }}
-    >
-      <View style={styles.articleHeader}>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <ThemedText style={styles.statusText}>{getStatusLabel(item.status)}</ThemedText>
-        </View>
-        <View style={styles.formatBadge}>
-          <ThemedText style={styles.formatText}>{getFormatLabel(item.format)}</ThemedText>
-        </View>
-      </View>
-      <ThemedText style={styles.articleTitle}>{item.title}</ThemedText>
-      <ThemedText style={styles.articleSubtitle} numberOfLines={2}>
-        {item.subtitle}
-      </ThemedText>
-      <ThemedText style={styles.articleDate}>
-        {new Date(item.createdAt).toLocaleDateString("it-IT", {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </ThemedText>
-    </Pressable>
-  );
+    if (!companyInfo.name) {
+      Alert.alert('Errore', 'Configura le informazioni aziendali prima di generare un articolo');
+      setShowCompanyModal(true);
+      return;
+    }
 
-  // Get document type color
-  const getDocTypeColor = (type: KBDocument["type"]): string => {
-    const colors: Record<KBDocument["type"], string> = {
-      whitepaper: "#1E88E5",
-      press_release: "#43A047",
-      innovation: "#E53935",
-      product: "#FB8C00",
-      case_study: "#8E24AA",
-      other: "#757575",
-    };
-    return colors[type] || "#757575";
+    setIsGenerating(true);
+
+    try {
+      const response = await generateArticle({
+        documents: documents.map(d => ({
+          name: d.name,
+          category: d.category,
+          content: d.content,
+        })),
+        companyInfo,
+        format: selectedFormat,
+      });
+
+      if (response.success && response.article) {
+        const newArticle: StoredArticle = {
+          ...response.article,
+          id: Date.now().toString(),
+          generatedAt: new Date().toISOString(),
+          format: selectedFormat,
+          status: 'draft',
+        };
+
+        await saveArticles([newArticle, ...articles]);
+        setSelectedArticle(newArticle);
+        setShowArticleModal(true);
+        Alert.alert('Successo', 'Articolo generato con AI!');
+      }
+    } catch (error: any) {
+      console.error('Error generating article:', error);
+      Alert.alert('Errore', error.message || 'Impossibile generare l\'articolo. Verifica il credito OpenAI.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  // Get status color
-  const getStatusColor = (status: GeneratedArticle["status"]): string => {
-    const colors: Record<GeneratedArticle["status"], string> = {
-      draft: "#757575",
-      pending_review: "#FB8C00",
-      approved: "#43A047",
-      sent: "#1E88E5",
-    };
-    return colors[status] || "#757575";
-  };
-
-  // Get status label
-  const getStatusLabel = (status: GeneratedArticle["status"]): string => {
-    const labels: Record<GeneratedArticle["status"], string> = {
-      draft: "Bozza",
-      pending_review: "In Revisione",
-      approved: "Approvato",
-      sent: "Inviato",
-    };
-    return labels[status] || status;
-  };
-
-  if (loading) {
-    return (
-      <ThemedView style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#2E7D32" />
-        <ThemedText style={styles.loadingText}>Caricamento Knowledge Base...</ThemedText>
-      </ThemedView>
+  const handleApproveArticle = async (article: StoredArticle) => {
+    const updated = articles.map(a => 
+      a.id === article.id ? { ...a, status: 'approved' as const } : a
     );
-  }
+    await saveArticles(updated);
+    setShowArticleModal(false);
+    Alert.alert('Approvato!', 'L\'articolo è pronto per essere inviato dalla Home.');
+  };
+
+  const handleDeleteArticle = async (id: string) => {
+    await saveArticles(articles.filter(a => a.id !== id));
+    setShowArticleModal(false);
+  };
+
+  const formatLabels: Record<ArticleFormat, string> = {
+    news_brief: 'News Breve',
+    deep_dive: 'Approfondimento',
+    interview: 'Intervista',
+    case_study: 'Case Study',
+    announcement: 'Annuncio',
+  };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: Math.max(insets.top, 16),
-            paddingBottom: Math.max(insets.bottom, 20) + 100,
-          },
-        ]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2E7D32" />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <LinearGradient
-          colors={["#6A1B9A", "#8E24AA", "#AB47BC"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <ThemedText style={styles.headerEmoji}>🤖</ThemedText>
-            <View style={styles.headerText}>
-              <ThemedText style={styles.headerTitle}>AI Journalist</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>
-                Knowledge Base & Generazione Articoli
-              </ThemedText>
-            </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{documents.length}</ThemedText>
-              <ThemedText style={styles.statLabel}>Documenti</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{articles.length}</ThemedText>
-              <ThemedText style={styles.statLabel}>Articoli</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>
-                {articles.filter(a => a.status === "approved").length}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>Approvati</ThemedText>
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* Tab Switcher */}
-        <View style={styles.tabSwitcher}>
-          {(["documents", "company", "generate", "articles"] as Tab[]).map((tab) => (
-            <Pressable
-              key={tab}
-              style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab(tab);
-              }}
-            >
-              <ThemedText style={[styles.tabBtnText, activeTab === tab && styles.tabBtnTextActive]}>
-                {tab === "documents" && "📄 Documenti"}
-                {tab === "company" && "🏢 Azienda"}
-                {tab === "generate" && "✨ Genera"}
-                {tab === "articles" && "📰 Articoli"}
-              </ThemedText>
-            </Pressable>
-          ))}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>AI Journalist</Text>
+        <View style={styles.healthBadge}>
+          <View style={[styles.healthDot, { backgroundColor: isApiHealthy ? '#34C759' : isApiHealthy === false ? '#FF3B30' : '#FF9500' }]} />
+          <Text style={styles.healthText}>{isApiHealthy ? 'Online' : isApiHealthy === false ? 'Offline' : 'Checking...'}</Text>
         </View>
+      </View>
 
-        {/* Documents Tab */}
-        {activeTab === "documents" && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>Knowledge Base</ThemedText>
-              <Pressable style={styles.addButton} onPress={handlePickDocument}>
-                <ThemedText style={styles.addButtonText}>+ Carica</ThemedText>
+      {/* Tabs */}
+      <View style={styles.tabs}>
+        {(['documents', 'articles', 'settings'] as const).map(tab => (
+          <Pressable
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {tab === 'documents' ? 'Documenti' : tab === 'articles' ? 'Articoli' : 'Azienda'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Content */}
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {activeTab === 'documents' && (
+          <>
+            {/* Upload Buttons */}
+            <View style={styles.uploadRow}>
+              <Pressable style={styles.uploadButton} onPress={handleUploadDocument}>
+                <Text style={styles.uploadButtonText}>📄 Carica File</Text>
+              </Pressable>
+              <Pressable style={styles.uploadButton} onPress={handleAddManualDocument}>
+                <Text style={styles.uploadButtonText}>✏️ Aggiungi Testo</Text>
               </Pressable>
             </View>
-            <ThemedText style={styles.sectionDescription}>
-              Carica whitepaper, press release, documenti di prodotto e altre informazioni. L'AI userà questi dati per generare articoli giornalistici.
-            </ThemedText>
-            
+
+            {/* Documents List */}
             {documents.length === 0 ? (
               <View style={styles.emptyState}>
-                <ThemedText style={styles.emptyEmoji}>📁</ThemedText>
-                <ThemedText style={styles.emptyTitle}>Nessun documento</ThemedText>
-                <ThemedText style={styles.emptyText}>
-                  Carica i tuoi documenti per iniziare a generare articoli personalizzati
-                </ThemedText>
-                <Pressable style={styles.emptyButton} onPress={handlePickDocument}>
-                  <ThemedText style={styles.emptyButtonText}>Carica Documento</ThemedText>
-                </Pressable>
+                <Text style={styles.emptyIcon}>📚</Text>
+                <Text style={styles.emptyTitle}>Nessun documento</Text>
+                <Text style={styles.emptySubtitle}>Carica whitepaper, press release o altri documenti per generare articoli AI</Text>
               </View>
             ) : (
-              <FlatList
-                data={documents}
-                renderItem={renderDocumentCard}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-              />
+              documents.map(doc => (
+                <View key={doc.id} style={styles.docCard}>
+                  <View style={styles.docInfo}>
+                    <Text style={styles.docName}>{doc.name}</Text>
+                    <Text style={styles.docMeta}>{doc.category} • {new Date(doc.uploadedAt).toLocaleDateString()}</Text>
+                    <Text style={styles.docPreview} numberOfLines={2}>{doc.content}</Text>
+                  </View>
+                  <Pressable onPress={() => handleDeleteDocument(doc.id)} style={styles.deleteButton}>
+                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                  </Pressable>
+                </View>
+              ))
             )}
-            
-            {/* Manual text input */}
-            <Pressable
-              style={styles.manualInputButton}
-              onPress={() => {
-                setUploadName("");
-                setUploadContent("");
-                setUploadType("other");
-                setShowUploadModal(true);
-              }}
-            >
-              <ThemedText style={styles.manualInputIcon}>✏️</ThemedText>
-              <ThemedText style={styles.manualInputText}>Inserisci testo manualmente</ThemedText>
-            </Pressable>
-          </View>
-        )}
 
-        {/* Company Tab */}
-        {activeTab === "company" && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>Informazioni Aziendali</ThemedText>
-              <Pressable style={styles.addButton} onPress={() => setShowCompanyModal(true)}>
-                <ThemedText style={styles.addButtonText}>
-                  {companyInfo ? "Modifica" : "+ Configura"}
-                </ThemedText>
-              </Pressable>
-            </View>
-            <ThemedText style={styles.sectionDescription}>
-              Configura le informazioni sulla tua azienda. L'AI le userà per contestualizzare gli articoli.
-            </ThemedText>
-            
-            {companyInfo ? (
-              <View style={styles.companyCard}>
-                <ThemedText style={styles.companyName}>{companyInfo.name}</ThemedText>
-                <ThemedText style={styles.companyIndustry}>{companyInfo.industry}</ThemedText>
-                <ThemedText style={styles.companyDescription}>{companyInfo.description}</ThemedText>
+            {/* Generate Button */}
+            {documents.length > 0 && (
+              <View style={styles.generateSection}>
+                <Text style={styles.sectionTitle}>Genera Articolo</Text>
                 
-                {companyInfo.keyProducts.length > 0 && (
-                  <View style={styles.companySection}>
-                    <ThemedText style={styles.companySectionTitle}>Prodotti Chiave</ThemedText>
-                    <View style={styles.tagsRow}>
-                      {companyInfo.keyProducts.map((p, i) => (
-                        <View key={i} style={styles.productTag}>
-                          <ThemedText style={styles.productTagText}>{p}</ThemedText>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-                
-                {companyInfo.uniqueSellingPoints.length > 0 && (
-                  <View style={styles.companySection}>
-                    <ThemedText style={styles.companySectionTitle}>Punti di Forza</ThemedText>
-                    {companyInfo.uniqueSellingPoints.map((usp, i) => (
-                      <ThemedText key={i} style={styles.uspItem}>• {usp}</ThemedText>
-                    ))}
-                  </View>
-                )}
-                
-                {companyInfo.ceo && (
-                  <View style={styles.companySection}>
-                    <ThemedText style={styles.companySectionTitle}>CEO</ThemedText>
-                    <ThemedText style={styles.ceoName}>{companyInfo.ceo}</ThemedText>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <ThemedText style={styles.emptyEmoji}>🏢</ThemedText>
-                <ThemedText style={styles.emptyTitle}>Nessuna informazione</ThemedText>
-                <ThemedText style={styles.emptyText}>
-                  Configura le informazioni sulla tua azienda per articoli più personalizzati
-                </ThemedText>
-                <Pressable style={styles.emptyButton} onPress={() => setShowCompanyModal(true)}>
-                  <ThemedText style={styles.emptyButtonText}>Configura Azienda</ThemedText>
+                {/* Format Selector */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.formatScroll}>
+                  {(Object.keys(formatLabels) as ArticleFormat[]).map(format => (
+                    <Pressable
+                      key={format}
+                      style={[styles.formatChip, selectedFormat === format && styles.formatChipActive]}
+                      onPress={() => setSelectedFormat(format)}
+                    >
+                      <Text style={[styles.formatChipText, selectedFormat === format && styles.formatChipTextActive]}>
+                        {formatLabels[format]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                <Pressable
+                  style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+                  onPress={handleGenerateArticle}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.generateButtonText}>🤖 Genera con AI</Text>
+                  )}
                 </Pressable>
               </View>
             )}
-          </View>
+          </>
         )}
 
-        {/* Generate Tab */}
-        {activeTab === "generate" && (
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Genera Articolo</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
-              L'AI analizzerà la tua Knowledge Base e genererà un articolo in stile giornalistico, imparziale e non promozionale.
-            </ThemedText>
-            
-            <View style={styles.generateForm}>
-              {/* Format Selection */}
-              <ThemedText style={styles.formLabel}>Formato Articolo</ThemedText>
-              <View style={styles.formatSelector}>
-                {(["news_brief", "feature", "interview", "case_study", "announcement"] as const).map((format) => (
-                  <Pressable
-                    key={format}
-                    style={[
-                      styles.formatOption,
-                      generateRequest.format === format && styles.formatOptionActive,
-                    ]}
-                    onPress={() => setGenerateRequest({ ...generateRequest, format })}
-                  >
-                    <ThemedText style={styles.formatOptionEmoji}>
-                      {format === "news_brief" && "📰"}
-                      {format === "feature" && "📝"}
-                      {format === "interview" && "🎤"}
-                      {format === "case_study" && "📊"}
-                      {format === "announcement" && "📢"}
-                    </ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.formatOptionText,
-                        generateRequest.format === format && styles.formatOptionTextActive,
-                      ]}
-                    >
-                      {getFormatLabel(format)}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-              
-              {/* Tone Selection */}
-              <ThemedText style={styles.formLabel}>Tono</ThemedText>
-              <View style={styles.toneSelector}>
-                {(["neutral", "enthusiastic", "analytical", "investigative"] as const).map((tone) => (
-                  <Pressable
-                    key={tone}
-                    style={[
-                      styles.toneOption,
-                      generateRequest.tone === tone && styles.toneOptionActive,
-                    ]}
-                    onPress={() => setGenerateRequest({ ...generateRequest, tone })}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.toneOptionText,
-                        generateRequest.tone === tone && styles.toneOptionTextActive,
-                      ]}
-                    >
-                      {tone === "neutral" && "Neutrale"}
-                      {tone === "enthusiastic" && "Entusiasta"}
-                      {tone === "analytical" && "Analitico"}
-                      {tone === "investigative" && "Investigativo"}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-              
-              {/* Topic (optional) */}
-              <ThemedText style={styles.formLabel}>Argomento Specifico (opzionale)</ThemedText>
-              <TextInput
-                style={styles.topicInput}
-                value={generateRequest.topic}
-                onChangeText={(text) => setGenerateRequest({ ...generateRequest, topic: text })}
-                placeholder="Es: lancio nuovo prodotto, risultati Q4, partnership..."
-                placeholderTextColor="#999"
-              />
-              
-              {/* Generate Button */}
-              <Pressable
-                style={[styles.generateButton, generating && styles.generateButtonDisabled]}
-                onPress={handleGenerateArticle}
-                disabled={generating}
-              >
-                {generating ? (
-                  <>
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                    <ThemedText style={styles.generateButtonText}>Generazione in corso...</ThemedText>
-                  </>
-                ) : (
-                  <>
-                    <ThemedText style={styles.generateButtonEmoji}>🤖</ThemedText>
-                    <ThemedText style={styles.generateButtonText}>Genera Articolo</ThemedText>
-                  </>
-                )}
-              </Pressable>
-              
-              <ThemedText style={styles.disclaimer}>
-                L'articolo sarà scritto in stile giornalistico imparziale, come se fosse redatto da un giornalista indipendente.
-              </ThemedText>
-            </View>
-          </View>
-        )}
-
-        {/* Articles Tab */}
-        {activeTab === "articles" && (
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Articoli Generati</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
-              Rivedi, modifica e approva gli articoli generati dall'AI prima di inviarli ai giornalisti.
-            </ThemedText>
-            
+        {activeTab === 'articles' && (
+          <>
             {articles.length === 0 ? (
               <View style={styles.emptyState}>
-                <ThemedText style={styles.emptyEmoji}>📰</ThemedText>
-                <ThemedText style={styles.emptyTitle}>Nessun articolo</ThemedText>
-                <ThemedText style={styles.emptyText}>
-                  Genera il tuo primo articolo dalla tab "Genera"
-                </ThemedText>
+                <Text style={styles.emptyIcon}>📝</Text>
+                <Text style={styles.emptyTitle}>Nessun articolo</Text>
+                <Text style={styles.emptySubtitle}>Genera il tuo primo articolo dalla tab Documenti</Text>
               </View>
             ) : (
-              <FlatList
-                data={articles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())}
-                renderItem={renderArticleCard}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-              />
+              articles.map(article => (
+                <Pressable
+                  key={article.id}
+                  style={styles.articleCard}
+                  onPress={() => {
+                    setSelectedArticle(article);
+                    setShowArticleModal(true);
+                  }}
+                >
+                  <View style={styles.articleHeader}>
+                    <View style={[styles.statusBadge, { backgroundColor: article.status === 'approved' ? '#34C759' : article.status === 'sent' ? '#007AFF' : '#FF9500' }]}>
+                      <Text style={styles.statusText}>{article.status === 'approved' ? 'Approvato' : article.status === 'sent' ? 'Inviato' : 'Bozza'}</Text>
+                    </View>
+                    <Text style={styles.articleFormat}>{formatLabels[article.format]}</Text>
+                  </View>
+                  <Text style={styles.articleTitle}>{article.title}</Text>
+                  <Text style={styles.articleSubtitle}>{article.subtitle}</Text>
+                  <Text style={styles.articleDate}>{new Date(article.generatedAt).toLocaleString()}</Text>
+                </Pressable>
+              ))
             )}
+          </>
+        )}
+
+        {activeTab === 'settings' && (
+          <View style={styles.settingsSection}>
+            <Text style={styles.sectionTitle}>Informazioni Aziendali</Text>
+            <Text style={styles.sectionSubtitle}>Queste informazioni vengono usate dall'AI per generare articoli contestualizzati</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Nome Azienda</Text>
+              <TextInput
+                style={styles.input}
+                value={companyInfo.name}
+                onChangeText={(text) => saveCompanyInfo({ ...companyInfo, name: text })}
+                placeholder="Es. GhostBridge"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>CEO / Fondatore</Text>
+              <TextInput
+                style={styles.input}
+                value={companyInfo.ceo}
+                onChangeText={(text) => saveCompanyInfo({ ...companyInfo, ceo: text })}
+                placeholder="Es. Marco Rossi"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Settore</Text>
+              <TextInput
+                style={styles.input}
+                value={companyInfo.industry}
+                onChangeText={(text) => saveCompanyInfo({ ...companyInfo, industry: text })}
+                placeholder="Es. Blockchain / Fintech"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Prodotti (separati da virgola)</Text>
+              <TextInput
+                style={styles.input}
+                value={companyInfo.products?.join(', ')}
+                onChangeText={(text) => saveCompanyInfo({ ...companyInfo, products: text.split(',').map(s => s.trim()).filter(Boolean) })}
+                placeholder="Es. Cross-chain Bridge, Wallet"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Punti di Forza (separati da virgola)</Text>
+              <TextInput
+                style={styles.input}
+                value={companyInfo.strengths?.join(', ')}
+                onChangeText={(text) => saveCompanyInfo({ ...companyInfo, strengths: text.split(',').map(s => s.trim()).filter(Boolean) })}
+                placeholder="Es. Sicurezza, Velocità, Innovazione"
+              />
+            </View>
           </View>
         )}
       </ScrollView>
 
-      {/* Upload Document Modal */}
-      <Modal visible={showUploadModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Aggiungi Documento</ThemedText>
-              <Pressable onPress={() => setShowUploadModal(false)}>
-                <ThemedText style={styles.modalClose}>✕</ThemedText>
-              </Pressable>
-            </View>
-            
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <ThemedText style={styles.formLabel}>Nome Documento</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={uploadName}
-                onChangeText={setUploadName}
-                placeholder="Es: Whitepaper AI 2024"
-                placeholderTextColor="#999"
-              />
-              
-              <ThemedText style={styles.formLabel}>Tipo Documento</ThemedText>
-              <View style={styles.typeSelector}>
-                {(["whitepaper", "press_release", "innovation", "product", "case_study", "other"] as const).map((type) => (
-                  <Pressable
-                    key={type}
-                    style={[styles.typeOption, uploadType === type && styles.typeOptionActive]}
-                    onPress={() => setUploadType(type)}
-                  >
-                    <ThemedText
-                      style={[styles.typeOptionText, uploadType === type && styles.typeOptionTextActive]}
-                    >
-                      {getDocumentTypeLabel(type)}
-                    </ThemedText>
-                  </Pressable>
+      {/* Article Preview Modal */}
+      <Modal visible={showArticleModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setShowArticleModal(false)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </Pressable>
+            <Text style={styles.modalTitle}>Anteprima Articolo</Text>
+            <View style={{ width: 30 }} />
+          </View>
+
+          {selectedArticle && (
+            <ScrollView style={styles.modalContent}>
+              <Text style={styles.previewTitle}>{selectedArticle.title}</Text>
+              <Text style={styles.previewSubtitle}>{selectedArticle.subtitle}</Text>
+              <View style={styles.previewTags}>
+                {selectedArticle.tags.map((tag, i) => (
+                  <View key={i} style={styles.previewTag}>
+                    <Text style={styles.previewTagText}>#{tag}</Text>
+                  </View>
                 ))}
               </View>
-              
-              <ThemedText style={styles.formLabel}>Contenuto</ThemedText>
-              <TextInput
-                style={[styles.input, styles.contentInput]}
-                value={uploadContent}
-                onChangeText={setUploadContent}
-                placeholder="Incolla qui il contenuto del documento..."
-                placeholderTextColor="#999"
-                multiline
-                textAlignVertical="top"
-              />
-            </ScrollView>
-            
-            <Pressable style={styles.saveButton} onPress={handleSaveDocument}>
-              <ThemedText style={styles.saveButtonText}>Salva Documento</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+              <Text style={styles.previewContent}>{selectedArticle.content}</Text>
 
-      {/* Company Info Modal */}
-      <Modal visible={showCompanyModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Informazioni Aziendali</ThemedText>
-              <Pressable onPress={() => setShowCompanyModal(false)}>
-                <ThemedText style={styles.modalClose}>✕</ThemedText>
-              </Pressable>
-            </View>
-            
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <ThemedText style={styles.formLabel}>Nome Azienda *</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={companyForm.name}
-                onChangeText={(text) => setCompanyForm({ ...companyForm, name: text })}
-                placeholder="Es: GROWVERSE"
-                placeholderTextColor="#999"
-              />
-              
-              <ThemedText style={styles.formLabel}>Settore</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={companyForm.industry}
-                onChangeText={(text) => setCompanyForm({ ...companyForm, industry: text })}
-                placeholder="Es: Tecnologia, AI, Metaverso"
-                placeholderTextColor="#999"
-              />
-              
-              <ThemedText style={styles.formLabel}>Descrizione</ThemedText>
-              <TextInput
-                style={[styles.input, { height: 80 }]}
-                value={companyForm.description}
-                onChangeText={(text) => setCompanyForm({ ...companyForm, description: text })}
-                placeholder="Breve descrizione dell'azienda..."
-                placeholderTextColor="#999"
-                multiline
-              />
-              
-              <ThemedText style={styles.formLabel}>CEO / Spokesperson</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={companyForm.ceo}
-                onChangeText={(text) => setCompanyForm({ ...companyForm, ceo: text })}
-                placeholder="Es: Roberto Romagnino"
-                placeholderTextColor="#999"
-              />
-              
-              <ThemedText style={styles.formLabel}>Prodotti Chiave (separati da virgola)</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={productsInput}
-                onChangeText={setProductsInput}
-                placeholder="Es: AI Platform, Metaverse SDK, Analytics"
-                placeholderTextColor="#999"
-              />
-              
-              <ThemedText style={styles.formLabel}>Punti di Forza (separati da virgola)</ThemedText>
-              <TextInput
-                style={[styles.input, { height: 80 }]}
-                value={uspInput}
-                onChangeText={setUspInput}
-                placeholder="Es: Tecnologia proprietaria, Team esperto, Clienti Fortune 500"
-                placeholderTextColor="#999"
-                multiline
-              />
-              
-              <ThemedText style={styles.formLabel}>Boilerplate (testo standard)</ThemedText>
-              <TextInput
-                style={[styles.input, { height: 100 }]}
-                value={companyForm.boilerplate}
-                onChangeText={(text) => setCompanyForm({ ...companyForm, boilerplate: text })}
-                placeholder="Testo standard che appare alla fine dei comunicati..."
-                placeholderTextColor="#999"
-                multiline
-              />
-            </ScrollView>
-            
-            <Pressable style={styles.saveButton} onPress={handleSaveCompanyInfo}>
-              <ThemedText style={styles.saveButtonText}>Salva Informazioni</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Article Preview Modal */}
-      <Modal visible={showArticlePreview} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.previewModal, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Anteprima Articolo</ThemedText>
-              <Pressable onPress={() => setShowArticlePreview(false)}>
-                <ThemedText style={styles.modalClose}>✕</ThemedText>
-              </Pressable>
-            </View>
-            
-            {selectedArticle && (
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                <View style={styles.previewHeader}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedArticle.status) }]}>
-                    <ThemedText style={styles.statusText}>{getStatusLabel(selectedArticle.status)}</ThemedText>
-                  </View>
-                  <View style={styles.formatBadge}>
-                    <ThemedText style={styles.formatText}>{getFormatLabel(selectedArticle.format)}</ThemedText>
-                  </View>
-                </View>
-                
-                <ThemedText style={styles.previewTitle}>{selectedArticle.title}</ThemedText>
-                <ThemedText style={styles.previewSubtitle}>{selectedArticle.subtitle}</ThemedText>
-                
-                <View style={styles.previewMeta}>
-                  <ThemedText style={styles.previewAngle}>📐 Angolo: {selectedArticle.angle}</ThemedText>
-                </View>
-                
-                <View style={styles.previewContent}>
-                  <ThemedText style={styles.previewContentText}>{selectedArticle.content}</ThemedText>
-                </View>
-                
-                {selectedArticle.targetAudience.length > 0 && (
-                  <View style={styles.previewAudience}>
-                    <ThemedText style={styles.previewAudienceTitle}>Target Audience:</ThemedText>
-                    <View style={styles.tagsRow}>
-                      {selectedArticle.targetAudience.map((a, i) => (
-                        <View key={i} style={styles.audienceTag}>
-                          <ThemedText style={styles.audienceTagText}>{a}</ThemedText>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </ScrollView>
-            )}
-            
-            {selectedArticle && selectedArticle.status === "draft" && (
               <View style={styles.previewActions}>
+                {selectedArticle.status === 'draft' && (
+                  <Pressable
+                    style={styles.approveButton}
+                    onPress={() => handleApproveArticle(selectedArticle)}
+                  >
+                    <Text style={styles.approveButtonText}>✓ Approva</Text>
+                  </Pressable>
+                )}
                 <Pressable
-                  style={styles.rejectButton}
-                  onPress={async () => {
-                    await deleteArticle(selectedArticle.id);
-                    setShowArticlePreview(false);
-                    loadData();
-                  }}
+                  style={styles.deleteArticleButton}
+                  onPress={() => handleDeleteArticle(selectedArticle.id)}
                 >
-                  <ThemedText style={styles.rejectButtonText}>🗑️ Elimina</ThemedText>
-                </Pressable>
-                <Pressable
-                  style={styles.approveButton}
-                  onPress={() => handleApproveArticle(selectedArticle)}
-                >
-                  <ThemedText style={styles.approveButtonText}>✅ Approva</ThemedText>
+                  <Text style={styles.deleteArticleButtonText}>🗑️ Elimina</Text>
                 </Pressable>
               </View>
-            )}
-            
-            {selectedArticle && selectedArticle.status === "approved" && (
-              <Pressable style={styles.sendButton}>
-                <ThemedText style={styles.sendButtonText}>📤 Vai alla Home per Inviare</ThemedText>
-              </Pressable>
-            )}
-          </View>
+            </ScrollView>
+          )}
         </View>
       </Modal>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: "#666",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
+    backgroundColor: '#f5f5f5',
   },
   header: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
   },
-  headerEmoji: {
-    fontSize: 40,
-    marginRight: 12,
-  },
-  headerText: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "rgba(255,255,255,0.15)",
+  healthBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
-    padding: 12,
   },
-  statItem: {
-    alignItems: "center",
+  healthDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
-  },
-  tabSwitcher: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  tabBtnActive: {
-    backgroundColor: "#6A1B9A",
-  },
-  tabBtnText: {
+  healthText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
+    color: '#666',
   },
-  tabBtnTextActive: {
-    color: "#FFFFFF",
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
-  section: {
-    marginBottom: 24,
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+  tabActive: {
+    backgroundColor: '#007AFF',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1A1A1A",
+  tabText: {
+    fontSize: 14,
+    color: '#666',
   },
-  sectionDescription: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 16,
-    lineHeight: 20,
+  tabTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
-  addButton: {
-    backgroundColor: "#6A1B9A",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  content: {
+    flex: 1,
+    padding: 20,
   },
-  addButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#FFFFFF",
+  uploadRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  uploadButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   emptyState: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 32,
-    alignItems: "center",
+    alignItems: 'center',
+    paddingVertical: 60,
   },
-  emptyEmoji: {
+  emptyIcon: {
     fontSize: 48,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
-  emptyText: {
+  emptySubtitle: {
     fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 16,
-    lineHeight: 20,
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
-  emptyButton: {
-    backgroundColor: "#6A1B9A",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  documentCard: {
-    backgroundColor: "#FFFFFF",
+  docCard: {
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
-  docHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  docTypeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  docTypeText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  docDate: {
-    fontSize: 11,
-    color: "#999",
+  docInfo: {
+    flex: 1,
   },
   docName: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 4,
   },
-  docSummary: {
-    fontSize: 13,
-    color: "#666",
-    lineHeight: 18,
+  docMeta: {
+    fontSize: 12,
+    color: '#666',
     marginBottom: 8,
   },
-  keywordsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
+  docPreview: {
+    fontSize: 13,
+    color: '#888',
+    lineHeight: 18,
   },
-  keywordBadge: {
-    backgroundColor: "#F3E5F5",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+  deleteButton: {
+    padding: 8,
   },
-  keywordText: {
-    fontSize: 10,
-    color: "#6A1B9A",
-    fontWeight: "500",
+  deleteButtonText: {
+    fontSize: 18,
   },
-  manualInputButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: 2,
-    borderColor: "#E0E0E0",
-    borderStyle: "dashed",
-  },
-  manualInputIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  manualInputText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-  },
-  companyCard: {
-    backgroundColor: "#FFFFFF",
+  generateSection: {
+    marginTop: 20,
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  companyName: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1A1A1A",
-    marginBottom: 4,
-  },
-  companyIndustry: {
-    fontSize: 14,
-    color: "#6A1B9A",
-    fontWeight: "600",
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 12,
   },
-  companyDescription: {
-    fontSize: 14,
-    color: "#666",
-    lineHeight: 20,
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#666',
     marginBottom: 16,
   },
-  companySection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
+  formatScroll: {
+    marginBottom: 16,
   },
-  companySectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#999",
-    textTransform: "uppercase",
-    marginBottom: 8,
-  },
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  productTag: {
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  productTagText: {
-    fontSize: 12,
-    color: "#2E7D32",
-    fontWeight: "500",
-  },
-  uspItem: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  ceoName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  generateForm: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-  },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#666",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  formatSelector: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  formatOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  formatOptionActive: {
-    backgroundColor: "#F3E5F5",
-    borderColor: "#6A1B9A",
-  },
-  formatOptionEmoji: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  formatOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
-  },
-  formatOptionTextActive: {
-    color: "#6A1B9A",
-  },
-  toneSelector: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  toneOption: {
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 14,
+  formatChip: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
   },
-  toneOptionActive: {
-    backgroundColor: "#F3E5F5",
-    borderColor: "#6A1B9A",
+  formatChipActive: {
+    backgroundColor: '#007AFF',
   },
-  toneOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
+  formatChipText: {
+    fontSize: 13,
+    color: '#666',
   },
-  toneOptionTextActive: {
-    color: "#6A1B9A",
-  },
-  topicInput: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 14,
-    color: "#1A1A1A",
+  formatChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   generateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#6A1B9A",
-    borderRadius: 12,
+    backgroundColor: '#34C759',
     padding: 16,
-    marginTop: 20,
-    gap: 8,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   generateButtonDisabled: {
     opacity: 0.6,
   },
-  generateButtonEmoji: {
-    fontSize: 20,
-  },
   generateButtonText: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  disclaimer: {
-    fontSize: 11,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 12,
-    fontStyle: "italic",
+    fontWeight: '600',
+    color: '#fff',
   },
   articleCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 12,
   },
   articleHeader: {
-    flexDirection: "row",
-    gap: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 10,
   },
   statusText: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    color: '#fff',
+    fontWeight: '600',
   },
-  formatBadge: {
-    backgroundColor: "#F3E5F5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  formatText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#6A1B9A",
+  articleFormat: {
+    fontSize: 12,
+    color: '#666',
   },
   articleTitle: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 4,
   },
   articleSubtitle: {
-    fontSize: 13,
-    color: "#666",
-    lineHeight: 18,
+    fontSize: 14,
+    color: '#666',
     marginBottom: 8,
   },
   articleDate: {
-    fontSize: 11,
-    color: "#999",
+    fontSize: 12,
+    color: '#999',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  settingsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
     padding: 20,
-    maxHeight: "85%",
   },
-  previewModal: {
-    maxHeight: "90%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  inputGroup: {
     marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1A1A1A",
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 15,
+    color: '#1a1a1a',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   modalClose: {
     fontSize: 24,
-    color: "#999",
-    padding: 4,
+    color: '#666',
   },
-  modalScroll: {
-    maxHeight: 400,
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
-  input: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 14,
-    color: "#1A1A1A",
-    marginBottom: 8,
-  },
-  contentInput: {
-    height: 200,
-    textAlignVertical: "top",
-  },
-  typeSelector: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 12,
-  },
-  typeOption: {
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  typeOptionActive: {
-    backgroundColor: "#F3E5F5",
-    borderColor: "#6A1B9A",
-  },
-  typeOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
-  },
-  typeOptionTextActive: {
-    color: "#6A1B9A",
-  },
-  saveButton: {
-    backgroundColor: "#6A1B9A",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  previewHeader: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
+  modalContent: {
+    flex: 1,
+    padding: 20,
   },
   previewTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#1A1A1A",
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
     marginBottom: 8,
-    lineHeight: 28,
+    lineHeight: 32,
   },
   previewSubtitle: {
     fontSize: 16,
-    color: "#666",
+    color: '#666',
     marginBottom: 16,
-    lineHeight: 22,
-    fontStyle: "italic",
+    lineHeight: 24,
   },
-  previewMeta: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+  previewTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
   },
-  previewAngle: {
-    fontSize: 13,
-    color: "#666",
-  },
-  previewContent: {
-    backgroundColor: "#FAFAFA",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  previewContentText: {
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 22,
-  },
-  previewAudience: {
-    marginBottom: 16,
-  },
-  previewAudienceTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#999",
+  previewTag: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginRight: 8,
     marginBottom: 8,
   },
-  audienceTag: {
-    backgroundColor: "#E3F2FD",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  audienceTagText: {
+  previewTagText: {
     fontSize: 12,
-    color: "#1565C0",
-    fontWeight: "500",
+    color: '#007AFF',
+  },
+  previewContent: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 30,
   },
   previewActions: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
-    marginTop: 16,
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: "#FFEBEE",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-  },
-  rejectButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#C62828",
+    marginBottom: 40,
   },
   approveButton: {
-    flex: 2,
-    backgroundColor: "#43A047",
+    flex: 1,
+    backgroundColor: '#34C759',
+    padding: 16,
     borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
+    alignItems: 'center',
   },
   approveButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
-  sendButton: {
-    backgroundColor: "#1E88E5",
-    borderRadius: 12,
+  deleteArticleButton: {
+    backgroundColor: '#FF3B30',
     padding: 16,
-    alignItems: "center",
-    marginTop: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    paddingHorizontal: 24,
   },
-  sendButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#FFFFFF",
+  deleteArticleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

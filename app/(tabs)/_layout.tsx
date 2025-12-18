@@ -51,34 +51,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="knowledge"
-        options={{
-          title: "AI Journalist",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="autopilot"
-        options={{
-          title: "Autopilot",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bolt.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="templates"
-        options={{
-          title: "Templates",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: "Calendario",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="stats"
         options={{
           title: "Statistiche",
@@ -86,10 +58,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="knowledge"
         options={{
-          title: "Impostazioni",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          title: "AI Journalist",
+          tabBarLabel: "AI",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain" color={color} />,
         }}
       />
     </Tabs>

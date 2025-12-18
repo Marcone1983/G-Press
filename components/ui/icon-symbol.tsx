@@ -25,9 +25,6 @@ const MAPPING = {
   "envelope.fill": "email",
   "checkmark.circle.fill": "check-circle",
   "chart.bar.fill": "bar-chart",
-  "bolt.fill": "bolt",
-  "calendar": "event",
-  "gearshape.fill": "settings",
   "brain": "psychology",
 } as IconMapping;
 

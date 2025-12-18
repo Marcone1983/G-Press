@@ -44,8 +44,6 @@ jobs:
           pnpm exec expo prebuild --platform android --clean
 
       - name: Build APK
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           cd android
           ./gradlew assembleRelease

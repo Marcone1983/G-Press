@@ -309,3 +309,246 @@ export async function deleteTemplate(id: number) {
   
   await db.delete(templates).where(eq(templates.id, id));
 }
+
+
+// ============================================
+// AI ARTICLE CACHE FUNCTIONS
+// ============================================
+
+import crypto from "crypto";
+
+function hashInput(input: unknown): string {
+  return crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+export async function getCachedArticle(userId: number, input: unknown) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const inputHash = hashInput(input);
+  
+  // Check if we have a cached article that's less than 7 days old
+  const result = await db.execute(sql`
+    SELECT * FROM ai_articles_cache 
+    WHERE user_id = ${userId} 
+    AND input_hash = ${inputHash}
+    AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+  
+  const rows = (result as any)[0] as any[];
+  if (rows && rows.length > 0) {
+    const row = rows[0];
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle,
+      content: row.content,
+      tags: JSON.parse(row.tags || "[]"),
+      suggestedCategories: JSON.parse(row.suggested_categories || "[]"),
+      estimatedReadTime: row.estimated_read_time,
+    };
+  }
+  
+  return null;
+}
+
+export async function cacheArticle(userId: number, input: unknown, article: {
+  title: string;
+  subtitle: string;
+  content: string;
+  tags: string[];
+  suggestedCategories: string[];
+  estimatedReadTime: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const inputHash = hashInput(input);
+  
+  const result = await db.execute(sql`
+    INSERT INTO ai_articles_cache 
+    (user_id, input_hash, title, subtitle, content, tags, suggested_categories, estimated_read_time, status)
+    VALUES (
+      ${userId},
+      ${inputHash},
+      ${article.title},
+      ${article.subtitle},
+      ${article.content},
+      ${JSON.stringify(article.tags)},
+      ${JSON.stringify(article.suggestedCategories)},
+      ${article.estimatedReadTime},
+      'draft'
+    )
+  `);
+  
+  return (result[0] as any).insertId;
+}
+
+export async function getUserArticles(userId: number, status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  let query = sql`SELECT * FROM ai_articles_cache WHERE user_id = ${userId}`;
+  if (status) {
+    query = sql`SELECT * FROM ai_articles_cache WHERE user_id = ${userId} AND status = ${status}`;
+  }
+  query = sql`${query} ORDER BY created_at DESC`;
+  
+  const result = await db.execute(query);
+  const rows = (result as any)[0] as any[];
+  
+  return rows.map(row => ({
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle,
+    content: row.content,
+    tags: JSON.parse(row.tags || "[]"),
+    suggestedCategories: JSON.parse(row.suggested_categories || "[]"),
+    estimatedReadTime: row.estimated_read_time,
+    status: row.status,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function updateArticleStatus(id: number, status: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.execute(sql`UPDATE ai_articles_cache SET status = ${status} WHERE id = ${id}`);
+}
+
+export async function deleteArticle(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.execute(sql`DELETE FROM ai_articles_cache WHERE id = ${id}`);
+}
+
+// ============================================
+// KNOWLEDGE BASE FUNCTIONS
+// ============================================
+
+export async function getKnowledgeDocuments(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db.execute(sql`
+    SELECT * FROM knowledge_documents 
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `);
+  
+  const rows = (result as any)[0] as any[];
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    content: row.content,
+    category: row.category,
+    fileType: row.file_type,
+    fileSize: row.file_size,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createKnowledgeDocument(userId: number, data: {
+  name: string;
+  content: string;
+  category?: string;
+  fileType?: string;
+  fileSize?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.execute(sql`
+    INSERT INTO knowledge_documents 
+    (user_id, name, content, category, file_type, file_size)
+    VALUES (
+      ${userId},
+      ${data.name},
+      ${data.content},
+      ${data.category || "general"},
+      ${data.fileType || "text"},
+      ${data.fileSize || 0}
+    )
+  `);
+  
+  return (result[0] as any).insertId;
+}
+
+export async function deleteKnowledgeDocument(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.execute(sql`DELETE FROM knowledge_documents WHERE id = ${id}`);
+}
+
+export async function getCompanyInfo(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.execute(sql`
+    SELECT * FROM company_info WHERE user_id = ${userId} LIMIT 1
+  `);
+  
+  const rows = (result as any)[0] as any[];
+  if (rows && rows.length > 0) {
+    const row = rows[0];
+    return {
+      name: row.name,
+      ceo: row.ceo,
+      industry: row.industry,
+      products: JSON.parse(row.products || "[]"),
+      strengths: JSON.parse(row.strengths || "[]"),
+      boilerplate: row.boilerplate,
+      website: row.website,
+    };
+  }
+  
+  return null;
+}
+
+export async function saveCompanyInfo(userId: number, data: {
+  name: string;
+  ceo?: string;
+  industry?: string;
+  products?: string[];
+  strengths?: string[];
+  boilerplate?: string;
+  website?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Try to update first, if no rows affected, insert
+  const updateResult = await db.execute(sql`
+    UPDATE company_info SET
+      name = ${data.name},
+      ceo = ${data.ceo || null},
+      industry = ${data.industry || null},
+      products = ${JSON.stringify(data.products || [])},
+      strengths = ${JSON.stringify(data.strengths || [])},
+      boilerplate = ${data.boilerplate || null},
+      website = ${data.website || null}
+    WHERE user_id = ${userId}
+  `);
+  
+  if ((updateResult[0] as any).affectedRows === 0) {
+    await db.execute(sql`
+      INSERT INTO company_info 
+      (user_id, name, ceo, industry, products, strengths, boilerplate, website)
+      VALUES (
+        ${userId},
+        ${data.name},
+        ${data.ceo || null},
+        ${data.industry || null},
+        ${JSON.stringify(data.products || [])},
+        ${JSON.stringify(data.strengths || [])},
+        ${data.boilerplate || null},
+        ${data.website || null}
+      )
+    `);
+  }
+}

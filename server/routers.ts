@@ -5,6 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { sendPressRelease } from "./email";
+import { generateArticle, optimizeSubject } from "./ai";
 
 export const appRouter = router({
   system: systemRouter,
@@ -165,6 +166,127 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => db.deleteTemplate(input.id)),
+  }),
+
+  // ============================================
+  // AI ARTICLE GENERATION API
+  // ============================================
+  ai: router({
+    generateArticle: protectedProcedure
+      .input(z.object({
+        documents: z.array(z.object({
+          name: z.string(),
+          content: z.string(),
+          category: z.string(),
+        })),
+        companyInfo: z.object({
+          name: z.string(),
+          ceo: z.string(),
+          products: z.array(z.string()),
+          strengths: z.array(z.string()),
+          industry: z.string(),
+        }),
+        format: z.enum(["news_brief", "deep_dive", "interview", "case_study", "announcement"]),
+        targetAudience: z.string().optional(),
+        tone: z.enum(["formal", "conversational", "technical"]).optional(),
+        skipCache: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const startTime = Date.now();
+        
+        // Check cache first (unless skipCache is true)
+        if (!input.skipCache) {
+          const cached = await db.getCachedArticle(ctx.user.id, input);
+          if (cached) {
+            return {
+              ...cached,
+              fromCache: true,
+              generationTimeMs: Date.now() - startTime,
+            };
+          }
+        }
+        
+        // Generate new article with OpenAI
+        const article = await generateArticle(input);
+        
+        // Save to cache
+        const id = await db.cacheArticle(ctx.user.id, input, article);
+        
+        return {
+          id,
+          ...article,
+          fromCache: false,
+          generationTimeMs: Date.now() - startTime,
+        };
+      }),
+
+    optimizeSubject: publicProcedure
+      .input(z.object({
+        originalSubject: z.string(),
+        historicalData: z.array(z.object({
+          subject: z.string(),
+          openRate: z.number(),
+        })).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const suggestions = await optimizeSubject(
+          input.originalSubject,
+          input.historicalData || []
+        );
+        return { suggestions };
+      }),
+
+    listArticles: protectedProcedure
+      .input(z.object({ status: z.string().optional() }).optional())
+      .query(({ ctx, input }) => db.getUserArticles(ctx.user.id, input?.status)),
+
+    updateStatus: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["draft", "approved", "sent", "archived"]),
+      }))
+      .mutation(({ input }) => db.updateArticleStatus(input.id, input.status)),
+
+    deleteArticle: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => db.deleteArticle(input.id)),
+  }),
+
+  // ============================================
+  // KNOWLEDGE BASE API
+  // ============================================
+  knowledge: router({
+    listDocuments: protectedProcedure
+      .query(({ ctx }) => db.getKnowledgeDocuments(ctx.user.id)),
+
+    uploadDocument: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        content: z.string(),
+        category: z.string().optional(),
+        fileType: z.string().optional(),
+        fileSize: z.number().optional(),
+      }))
+      .mutation(({ ctx, input }) => db.createKnowledgeDocument(ctx.user.id, input)),
+
+    deleteDocument: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => db.deleteKnowledgeDocument(input.id)),
+
+    getCompanyInfo: protectedProcedure
+      .query(({ ctx }) => db.getCompanyInfo(ctx.user.id)),
+
+    saveCompanyInfo: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        ceo: z.string().optional(),
+        industry: z.string().optional(),
+        products: z.array(z.string()).optional(),
+        strengths: z.array(z.string()).optional(),
+        boilerplate: z.string().optional(),
+        website: z.string().optional(),
+      }))
+      .mutation(({ ctx, input }) => db.saveCompanyInfo(ctx.user.id, input)),
   }),
 });
 
