@@ -1,6 +1,6 @@
 const loadEnv = require('./scripts/load-env.cjs');
 
-export default {
+module.exports = {
   name: "G-Press",
   slug: "g-press",
   version: "1.0.0",
