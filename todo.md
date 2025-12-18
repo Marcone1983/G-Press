@@ -13,3 +13,4 @@
 - [x] Sistema invio email (via mailto:)
 - [x] Persistenza dati con AsyncStorage
 - [x] Generare logo app personalizzato
+- [x] Sostituire logo con quello fornito dall'utente
