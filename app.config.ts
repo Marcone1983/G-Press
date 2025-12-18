@@ -1,9 +1,11 @@
-const loadEnv = require('./scripts/load-env.js');
+import './scripts/load-env.js';
 
-module.exports = {
+export default {
   name: "G-Press",
   version: "1.0.0",
   extra: {
-    ...loadEnv,
+    eas: {
+      projectId: process.env.EXPO_PUBLIC_APP_ID,
+    },
   },
 };
