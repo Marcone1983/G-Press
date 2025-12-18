@@ -1,6 +1,6 @@
-import './scripts/load-env.js';
+require('./scripts/load-env.cjs');
 
-export default {
+module.exports = {
   name: "G-Press",
   version: "1.0.0",
   platforms: ["ios", "android", "web"],
