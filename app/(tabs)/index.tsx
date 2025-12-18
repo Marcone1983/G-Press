@@ -89,6 +89,10 @@ const COUNTRIES = [
   { label: "🇧🇷 Brasile", value: "BR" },
   { label: "🇲🇽 Messico", value: "MX" },
   { label: "🇦🇷 Argentina", value: "AR" },
+  { label: "🇨🇳 Cina", value: "CN" },
+  { label: "🇷🇺 Russia", value: "RU" },
+  { label: "🥽 Metaverso", value: "Metaverso" },
+  { label: "🌍 Internazionale", value: "Internazionale" },
 ];
 
 export default function HomeScreen() {
@@ -114,6 +118,12 @@ export default function HomeScreen() {
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  
+  // Selection state - per selezione singoli giornalisti
+  const [selectedJournalistIds, setSelectedJournalistIds] = useState<Set<number>>(new Set());
+  const [showRecipientsModal, setShowRecipientsModal] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [useManualSelection, setUseManualSelection] = useState(false);
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -278,7 +288,58 @@ export default function HomeScreen() {
   }, [allJournalists, category, country]);
 
   const totalCount = allJournalists.length;
-  const filteredCount = filteredJournalists.length;
+  
+  // Calcola destinatari effettivi: se selezione manuale usa quella, altrimenti usa filtri
+  const effectiveRecipients = useMemo(() => {
+    if (useManualSelection && selectedJournalistIds.size > 0) {
+      return allJournalists.filter(j => selectedJournalistIds.has(j.id));
+    }
+    return filteredJournalists;
+  }, [useManualSelection, selectedJournalistIds, filteredJournalists, allJournalists]);
+  
+  const filteredCount = effectiveRecipients.length;
+  
+  // Giornalisti cercati nel modal
+  const searchedJournalists = useMemo(() => {
+    if (!recipientSearch.trim()) return allJournalists;
+    const query = recipientSearch.toLowerCase();
+    return allJournalists.filter(j => 
+      j.name?.toLowerCase().includes(query) ||
+      j.outlet?.toLowerCase().includes(query) ||
+      j.email?.toLowerCase().includes(query) ||
+      j.country?.toLowerCase().includes(query)
+    );
+  }, [allJournalists, recipientSearch]);
+  
+  // Toggle selezione giornalista
+  const toggleJournalistSelection = (id: number) => {
+    setSelectedJournalistIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+    if (!useManualSelection) setUseManualSelection(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  
+  // Seleziona tutti i filtrati
+  const selectAllFiltered = () => {
+    const ids = new Set(filteredJournalists.map(j => j.id));
+    setSelectedJournalistIds(ids);
+    setUseManualSelection(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  
+  // Deseleziona tutti
+  const deselectAll = () => {
+    setSelectedJournalistIds(new Set());
+    setUseManualSelection(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const saveToHistory = async (pressRelease: any) => {
     try {
@@ -323,8 +384,8 @@ export default function HomeScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
             try {
-              // Get all emails
-              const emails = filteredJournalists.map(j => j.email);
+              // Get all emails from effective recipients
+              const emails = effectiveRecipients.map(j => j.email);
               
               // Save to history first
               await saveToHistory({
@@ -509,6 +570,72 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
+        </View>
+
+        {/* Recipients Preview Card */}
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <ThemedText style={styles.cardTitle}>📨 Destinatari ({filteredCount})</ThemedText>
+            <View style={styles.templateButtons}>
+              {useManualSelection && (
+                <Pressable
+                  style={[styles.templateBtn, { backgroundColor: "#FFF3E0" }]}
+                  onPress={deselectAll}
+                >
+                  <ThemedText style={[styles.templateBtnText, { color: "#E65100" }]}>✖ Reset</ThemedText>
+                </Pressable>
+              )}
+              <Pressable
+                style={[styles.templateBtn, styles.templateBtnSave]}
+                onPress={() => setShowRecipientsModal(true)}
+              >
+                <ThemedText style={[styles.templateBtnText, { color: "#fff" }]}>🔍 Cerca</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+          
+          {/* Mode indicator */}
+          <View style={styles.modeIndicator}>
+            <ThemedText style={styles.modeText}>
+              {useManualSelection 
+                ? `✅ Selezione manuale: ${selectedJournalistIds.size} giornalisti` 
+                : `🎯 Filtro automatico: ${category !== "all" ? CATEGORIES.find(c => c.value === category)?.label : "Tutte le categorie"}${country !== "all" ? " - " + COUNTRIES.find(c => c.value === country)?.label : ""}`}
+            </ThemedText>
+          </View>
+          
+          {/* Recipients list preview - show first 5 */}
+          {effectiveRecipients.length > 0 ? (
+            <View style={styles.recipientsList}>
+              {effectiveRecipients.slice(0, 5).map((j) => (
+                <View key={j.id} style={styles.recipientItem}>
+                  <View style={styles.recipientInfo}>
+                    <ThemedText style={styles.recipientName}>{j.name}</ThemedText>
+                    <ThemedText style={styles.recipientOutlet}>{j.outlet}</ThemedText>
+                  </View>
+                  <ThemedText style={styles.recipientEmail}>{j.email}</ThemedText>
+                </View>
+              ))}
+              {effectiveRecipients.length > 5 && (
+                <Pressable 
+                  style={styles.showMoreBtn}
+                  onPress={() => setShowRecipientsModal(true)}
+                >
+                  <ThemedText style={styles.showMoreText}>
+                    +{effectiveRecipients.length - 5} altri destinatari - Tocca per vedere tutti
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          ) : (
+            <View style={styles.noRecipients}>
+              <ThemedText style={styles.noRecipientsText}>
+                ⚠️ Nessun destinatario selezionato
+              </ThemedText>
+              <ThemedText style={styles.noRecipientsHint}>
+                Modifica i filtri o cerca giornalisti specifici
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         {/* Press Release Form Card */}
@@ -736,6 +863,96 @@ export default function HomeScreen() {
             <Pressable style={styles.modalSaveBtn} onPress={saveTemplate}>
               <ThemedText style={styles.modalSaveBtnText}>Salva Template</ThemedText>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Recipients Selection Modal */}
+      <Modal
+        visible={showRecipientsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowRecipientsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.recipientsModalContent}>
+            <View style={styles.recipientsModalHeader}>
+              <ThemedText style={styles.modalTitle}>👥 Seleziona Destinatari</ThemedText>
+              <Pressable onPress={() => setShowRecipientsModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            {/* Search bar */}
+            <View style={styles.recipientsSearchBar}>
+              <ThemedText style={{ marginRight: 8 }}>🔍</ThemedText>
+              <TextInput
+                style={styles.recipientsSearchInput}
+                placeholder="Cerca per nome, testata, email..."
+                placeholderTextColor="#999"
+                value={recipientSearch}
+                onChangeText={setRecipientSearch}
+              />
+              {recipientSearch.length > 0 && (
+                <Pressable onPress={() => setRecipientSearch("")}>
+                  <ThemedText style={{ color: "#999" }}>✕</ThemedText>
+                </Pressable>
+              )}
+            </View>
+            
+            {/* Action buttons */}
+            <View style={styles.recipientsActions}>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: "#E8F5E9" }]}
+                onPress={selectAllFiltered}
+              >
+                <ThemedText style={[styles.actionBtnText, { color: "#2E7D32" }]}>
+                  ✅ Seleziona tutti ({filteredJournalists.length})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: "#FFF3E0" }]}
+                onPress={deselectAll}
+              >
+                <ThemedText style={[styles.actionBtnText, { color: "#E65100" }]}>
+                  ✖ Deseleziona tutti
+                </ThemedText>
+              </Pressable>
+            </View>
+            
+            {/* Selected count */}
+            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+              <ThemedText style={{ fontSize: 13, color: "#666" }}>
+                {selectedJournalistIds.size > 0 
+                  ? `${selectedJournalistIds.size} selezionati su ${searchedJournalists.length} mostrati`
+                  : `${searchedJournalists.length} giornalisti trovati`}
+              </ThemedText>
+            </View>
+            
+            {/* Journalists list */}
+            <FlatList
+              data={searchedJournalists}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => {
+                const isSelected = selectedJournalistIds.has(item.id);
+                return (
+                  <Pressable
+                    style={[styles.recipientSelectItem, isSelected && styles.recipientSelectItemSelected]}
+                    onPress={() => toggleJournalistSelection(item.id)}
+                  >
+                    <View style={[styles.recipientCheckbox, isSelected && styles.recipientCheckboxSelected]}>
+                      {isSelected && <ThemedText style={styles.recipientCheckmark}>✓</ThemedText>}
+                    </View>
+                    <View style={styles.recipientSelectInfo}>
+                      <ThemedText style={styles.recipientSelectName}>{item.name}</ThemedText>
+                      <ThemedText style={styles.recipientSelectOutlet}>{item.outlet} • {item.country}</ThemedText>
+                      <ThemedText style={styles.recipientSelectEmail}>{item.email}</ThemedText>
+                    </View>
+                  </Pressable>
+                );
+              }}
+              style={{ maxHeight: 400 }}
+            />
           </View>
         </View>
       </Modal>
@@ -1175,5 +1392,166 @@ const styles = StyleSheet.create({
   templateDelete: {
     fontSize: 18,
     padding: 8,
+  },
+  
+  // Recipients section styles
+  modeIndicator: {
+    backgroundColor: "#F0F7F0",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  modeText: {
+    fontSize: 13,
+    color: "#2E7D32",
+    textAlign: "center",
+  },
+  recipientsList: {
+    gap: 8,
+  },
+  recipientItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 10,
+    padding: 12,
+  },
+  recipientInfo: {
+    flex: 1,
+  },
+  recipientName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  recipientOutlet: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  recipientEmail: {
+    fontSize: 11,
+    color: "#43A047",
+    marginLeft: 8,
+  },
+  showMoreBtn: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+  },
+  showMoreText: {
+    fontSize: 13,
+    color: "#2E7D32",
+    fontWeight: "600",
+  },
+  noRecipients: {
+    alignItems: "center",
+    padding: 20,
+  },
+  noRecipientsText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#E65100",
+  },
+  noRecipientsHint: {
+    fontSize: 13,
+    color: "#999",
+    marginTop: 4,
+  },
+  
+  // Recipients modal styles
+  recipientsModalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "85%",
+  },
+  recipientsModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8E8E8",
+  },
+  recipientsSearchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    margin: 16,
+    paddingHorizontal: 12,
+  },
+  recipientsSearchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#1A1A1A",
+  },
+  recipientsActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  recipientSelectItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  recipientSelectItemSelected: {
+    backgroundColor: "#E8F5E9",
+  },
+  recipientCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#CCC",
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recipientCheckboxSelected: {
+    backgroundColor: "#43A047",
+    borderColor: "#43A047",
+  },
+  recipientCheckmark: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  recipientSelectInfo: {
+    flex: 1,
+  },
+  recipientSelectName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  recipientSelectOutlet: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
+  },
+  recipientSelectEmail: {
+    fontSize: 12,
+    color: "#43A047",
+    marginTop: 2,
   },
 });

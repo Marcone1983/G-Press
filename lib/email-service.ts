@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 
-const RESEND_API_KEY = Constants.expoConfig?.extra?.resendApiKey || '';
+// API Key hardcoded per funzionamento standalone APK
+const RESEND_API_KEY = Constants.expoConfig?.extra?.resendApiKey || 're_KDQAhbXV_3LimzkWiPTFv45T7M3NJ9ckL';
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
 interface EmailAttachment {

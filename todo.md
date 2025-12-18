@@ -110,3 +110,12 @@
 - [x] Preview delle immagini selezionate nel form articolo
 - [x] Possibilità di rimuovere immagini selezionate
 - [x] Integrare immagini nell'invio email con Resend (come allegati)
+
+## Funzionalità Avanzate v1.2
+- [x] Mostrare lista destinatari prima dell'invio (nome, email, testata)
+- [x] Aggiungere ricerca e selezione singoli giornalisti
+- [x] Fix errore expo-file-system readAsStringAsync deprecato
+- [x] Fix API Key Resend hardcoded per APK standalone
+- [x] Fix salvataggio paese nei contatti personalizzati (picker con tutti i paesi)
+- [x] Aggiunto paese Metaverso e Internazionale ai filtri
+- [ ] Aggiungere anteprima email prima dell'invio

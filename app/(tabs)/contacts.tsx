@@ -14,10 +14,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -78,7 +79,28 @@ const COUNTRY_FLAGS: Record<string, string> = {
   "Cina": "🇨🇳", "CN": "🇨🇳",
   "Russia": "🇷🇺", "RU": "🇷🇺",
   "Internazionale": "🌍",
+  "Metaverso": "🥽",
 };
+
+const COUNTRY_OPTIONS = [
+  { label: "🇮🇹 Italia", value: "IT" },
+  { label: "🇺🇸 USA", value: "US" },
+  { label: "🇬🇧 Regno Unito", value: "GB" },
+  { label: "🇫🇷 Francia", value: "FR" },
+  { label: "🇩🇪 Germania", value: "DE" },
+  { label: "🇪🇸 Spagna", value: "ES" },
+  { label: "🇨🇦 Canada", value: "CA" },
+  { label: "🇦🇺 Australia", value: "AU" },
+  { label: "🇯🇵 Giappone", value: "JP" },
+  { label: "🇮🇳 India", value: "IN" },
+  { label: "🇧🇷 Brasile", value: "BR" },
+  { label: "🇲🇽 Messico", value: "MX" },
+  { label: "🇦🇷 Argentina", value: "AR" },
+  { label: "🇨🇳 Cina", value: "CN" },
+  { label: "🇷🇺 Russia", value: "RU" },
+  { label: "🥽 Metaverso", value: "Metaverso" },
+  { label: "🌍 Internazionale", value: "Internazionale" },
+];
 
 const CATEGORY_COLORS: Record<string, string> = {
   technology: "#2196F3",
@@ -592,13 +614,18 @@ export default function ContactsScreen() {
             
             <View style={styles.formGroup}>
               <ThemedText style={styles.formLabel}>Paese</ThemedText>
-              <TextInput
-                style={styles.formInput}
-                placeholder="Es: Italia"
-                placeholderTextColor="#999"
-                value={newCountry}
-                onChangeText={setNewCountry}
-              />
+              <View style={styles.pickerWrapper}>
+                <Picker
+                  selectedValue={newCountry}
+                  onValueChange={setNewCountry}
+                  style={styles.picker}
+                  dropdownIconColor="#666"
+                >
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <Picker.Item key={c.value} label={c.label} value={c.value} />
+                  ))}
+                </Picker>
+              </View>
             </View>
             
             <View style={styles.formGroup}>
@@ -959,5 +986,16 @@ const styles = StyleSheet.create({
   categoryOptionTextActive: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  pickerWrapper: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    overflow: "hidden",
+  },
+  picker: {
+    height: 50,
+    color: "#1A1A1A",
   },
 });
