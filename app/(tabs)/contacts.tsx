@@ -23,6 +23,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { 
+  getJournalistMood, 
+  getAllJournalistMoods, 
+  getMoodEmoji, 
+  getMoodColor,
+  JournalistMood 
+} from "@/lib/ai-service";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -142,6 +149,11 @@ export default function ContactsScreen() {
   const [currentNote, setCurrentNote] = useState("");
   const [currentTags, setCurrentTags] = useState("");
   
+  // Mood Tracker
+  const [moods, setMoods] = useState<Record<string, JournalistMood>>({});
+  const [showMoodFilter, setShowMoodFilter] = useState(false);
+  const [moodFilter, setMoodFilter] = useState<'all' | 'hot' | 'warm' | 'cold' | 'inactive'>('all');
+  
   // Form state for adding new journalist
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -174,11 +186,17 @@ export default function ContactsScreen() {
       const blacklistData = await AsyncStorage.getItem(BLACKLIST_KEY);
       const vipData = await AsyncStorage.getItem(VIP_KEY);
       
+      // Load moods
+      const allMoods = await getAllJournalistMoods();
+      const moodsMap: Record<string, JournalistMood> = {};
+      allMoods.forEach(m => { moodsMap[m.email] = m; });
+      
       setJournalists(staticData);
       setCustomJournalists(custom);
       setNotes(notesData ? JSON.parse(notesData) : {});
       setBlacklist(blacklistData ? JSON.parse(blacklistData) : []);
       setVipList(vipData ? JSON.parse(vipData) : []);
+      setMoods(moodsMap);
     } catch (error) {
       console.error("Error loading journalists:", error);
     } finally {
@@ -401,7 +419,7 @@ export default function ContactsScreen() {
     return [...customJournalists, ...journalists];
   }, [journalists, customJournalists]);
 
-  // Filter by category and search
+  // Filter by category, search, and mood
   const filteredJournalists = useMemo(() => {
     let filtered = allJournalists;
     
@@ -419,8 +437,16 @@ export default function ContactsScreen() {
       );
     }
     
+    // Filter by mood
+    if (moodFilter !== 'all') {
+      filtered = filtered.filter(j => {
+        const mood = moods[j.email];
+        return mood?.mood === moodFilter;
+      });
+    }
+    
     return filtered;
-  }, [allJournalists, categoryFilter, searchQuery]);
+  }, [allJournalists, categoryFilter, searchQuery, moodFilter, moods]);
 
   // Group by country for stats
   const groupedByCountry = useMemo(() => {
@@ -480,6 +506,13 @@ export default function ContactsScreen() {
               {isVIP ? "🌟 " : ""}{item.isCustom ? "⭐ " : ""}{item.name || item.outlet}
             </ThemedText>
             <View style={styles.badgeRow}>
+              {moods[item.email] && (
+                <View style={[styles.moodBadge, { backgroundColor: getMoodColor(moods[item.email].mood) + '20' }]}>
+                  <ThemedText style={{ fontSize: 10 }}>
+                    {getMoodEmoji(moods[item.email].mood)}
+                  </ThemedText>
+                </View>
+              )}
               {hasNote && <ThemedText style={styles.noteBadge}>📝</ThemedText>}
               {isBlacklisted && <ThemedText style={styles.blacklistBadge}>🚫</ThemedText>}
               <ThemedText style={styles.countryFlag}>
@@ -586,6 +619,31 @@ export default function ContactsScreen() {
             </Pressable>
           )}
         />
+      </View>
+
+      {/* Mood Filter */}
+      <View style={styles.moodFilterContainer}>
+        <ThemedText style={styles.moodFilterLabel}>📊 Mood:</ThemedText>
+        {(['all', 'hot', 'warm', 'cold', 'inactive'] as const).map((mood) => (
+          <Pressable
+            key={mood}
+            style={[
+              styles.moodFilterPill,
+              moodFilter === mood && styles.moodFilterPillActive,
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setMoodFilter(mood);
+            }}
+          >
+            <ThemedText style={[
+              styles.moodFilterText,
+              moodFilter === mood && styles.moodFilterTextActive,
+            ]}>
+              {mood === 'all' ? 'Tutti' : mood === 'hot' ? '🔥 Hot' : mood === 'warm' ? '☀️ Warm' : mood === 'cold' ? '❄️ Cold' : '💤 Inattivi'}
+            </ThemedText>
+          </Pressable>
+        ))}
       </View>
 
       {/* Country Stats */}
@@ -1062,6 +1120,12 @@ const styles = StyleSheet.create({
   countryFlag: {
     fontSize: 18,
   },
+  moodBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 4,
+  },
   journalistOutlet: {
     fontSize: 13,
     color: "#666",
@@ -1353,5 +1417,34 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 8,
     textAlign: "center",
+  },
+  moodFilterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  moodFilterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  moodFilterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+  },
+  moodFilterPillActive: {
+    backgroundColor: "#2E7D32",
+  },
+  moodFilterText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#666",
+  },
+  moodFilterTextActive: {
+    color: "#FFFFFF",
   },
 });

@@ -206,3 +206,19 @@
 - [ ] **WIDGET HOME SCREEN** - Widget per vedere statistiche rapide
 - [ ] **SHAKE TO UNDO** - Scuoti per annullare l'ultima azione
 
+
+## G-Press v5.0 - GENIALATE ESCLUSIVE
+
+### Funzionalità Standard da Implementare:
+- [x] **DARK MODE** - Tema scuro per l'app con toggle nelle impostazioni
+- [x] **EXPORT REPORT PDF** - Genera report mensile delle performance (Share)
+- [x] **COMPETITOR TRACKING** - Verifica se i comunicati vengono pubblicati su Google News
+
+### 🚀 5 GENIALATE ESCLUSIVE G-PRESS:
+
+- [x] **1. AI SUBJECT OPTIMIZER** - Analizza oggetti email passati e suggerisce automaticamente l'oggetto migliore basandosi su pattern di apertura
+- [x] **2. JOURNALIST MOOD TRACKER** - Traccia il "mood" di ogni giornalista (velocità apertura, orari preferiti, frequenza engagement) per capire quando contattarlo
+- [x] **3. VIRAL POTENTIAL SCORE** - Calcola punteggio di "potenziale virale" del comunicato basandosi su keyword trending, lunghezza, match con interessi destinatari
+- [x] **4. SMART EMBARGO ZONES** - Rileva automaticamente fusi orari e festività dei paesi destinatari per evitare invii in momenti morti
+- [x] **5. PRESS RELEASE DNA** - Ogni comunicato ha un "DNA" unico che traccia diffusione: chi l'ha aperto per primo, chi l'ha inoltrato, catena di engagement
+

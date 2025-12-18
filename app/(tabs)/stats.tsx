@@ -6,6 +6,8 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
+  Alert,
+  Share,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -161,6 +163,31 @@ export default function StatsScreen() {
                 Monitoraggio Email Resend
               </ThemedText>
             </View>
+            <Pressable
+              style={styles.exportButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                const reportText = `📊 REPORT G-PRESS\n\n` +
+                  `📅 Data: ${new Date().toLocaleDateString('it-IT')}\n\n` +
+                  `📧 EMAIL TOTALI: ${stats?.total || 0}\n` +
+                  `✅ Consegnate: ${stats?.delivered || 0} (${stats?.total ? Math.round((stats.delivered / stats.total) * 100) : 0}%)\n` +
+                  `👀 Aperte: ${stats?.opened || 0} (${stats?.total ? Math.round((stats.opened / stats.total) * 100) : 0}%)\n` +
+                  `🔗 Cliccate: ${stats?.clicked || 0}\n` +
+                  `❌ Respinte: ${stats?.bounced || 0}\n\n` +
+                  `🎯 TOP GIORNALISTI:\n` +
+                  journalistScores.slice(0, 5).map((j, i) => 
+                    `${i + 1}. ${j.email} - Score: ${j.score}`
+                  ).join('\n') +
+                  `\n\n---\nGenerato da G-Press`;
+                
+                Share.share({
+                  message: reportText,
+                  title: 'Report G-Press',
+                });
+              }}
+            >
+              <ThemedText style={styles.exportButtonText}>📄 Export</ThemedText>
+            </Pressable>
           </View>
         </LinearGradient>
 
@@ -1062,5 +1089,18 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 3,
+  },
+  exportButton: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  exportButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

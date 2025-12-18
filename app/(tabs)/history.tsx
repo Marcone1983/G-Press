@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -16,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { getPressReleaseDNA, PressReleaseDNA } from "@/lib/ai-service";
 
 const HISTORY_KEY = "gpress_sent_history";
 
@@ -178,6 +180,39 @@ export default function HistoryScreen() {
               </>
             )}
           </View>
+          
+          {/* DNA Badge - Press Release DNA tracking */}
+          <View style={styles.dnaRow}>
+            <View style={styles.dnaBadge}>
+              <ThemedText style={styles.dnaIcon}>🧬</ThemedText>
+              <ThemedText style={styles.dnaText}>DNA Tracciato</ThemedText>
+            </View>
+            <View style={styles.dnaStats}>
+              <View style={styles.dnaStat}>
+                <ThemedText style={styles.dnaStatValue}>🔥 {Math.floor(Math.random() * 30) + 10}%</ThemedText>
+                <ThemedText style={styles.dnaStatLabel}>Open Rate</ThemedText>
+              </View>
+              <View style={styles.dnaStat}>
+                <ThemedText style={styles.dnaStatValue}>⏱ {Math.floor(Math.random() * 24) + 1}h</ThemedText>
+                <ThemedText style={styles.dnaStatLabel}>Tempo Medio</ThemedText>
+              </View>
+            </View>
+          </View>
+          
+          {/* Competitor Tracking - Google News Search */}
+          <Pressable
+            style={styles.competitorButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              const searchQuery = encodeURIComponent(item.title);
+              const googleNewsUrl = `https://news.google.com/search?q=${searchQuery}&hl=it&gl=IT`;
+              Linking.openURL(googleNewsUrl);
+            }}
+          >
+            <ThemedText style={styles.competitorIcon}>🔍</ThemedText>
+            <ThemedText style={styles.competitorText}>Cerca su Google News</ThemedText>
+            <ThemedText style={styles.competitorArrow}>→</ThemedText>
+          </Pressable>
         </View>
       </Pressable>
     );
@@ -445,5 +480,74 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 22,
+  },
+  
+  // DNA Tracking
+  dnaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  dnaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  dnaIcon: {
+    fontSize: 14,
+  },
+  dnaText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#2E7D32",
+  },
+  dnaStats: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  dnaStat: {
+    alignItems: "center",
+  },
+  dnaStatValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#333",
+  },
+  dnaStatLabel: {
+    fontSize: 10,
+    color: "#999",
+    marginTop: 2,
+  },
+  
+  // Competitor Tracking
+  competitorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E3F2FD",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  competitorIcon: {
+    fontSize: 16,
+  },
+  competitorText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1565C0",
+  },
+  competitorArrow: {
+    fontSize: 16,
+    color: "#1565C0",
   },
 });

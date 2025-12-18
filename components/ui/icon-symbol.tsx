@@ -27,6 +27,7 @@ const MAPPING = {
   "chart.bar.fill": "bar-chart",
   "bolt.fill": "bolt",
   "calendar": "event",
+  "gearshape.fill": "settings",
 } as IconMapping;
 
 /**

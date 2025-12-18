@@ -26,6 +26,14 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { sendEmailsWithAttachments, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
+import { 
+  getSubjectSuggestions, 
+  calculateViralScore, 
+  checkEmbargoZones,
+  SubjectSuggestion,
+  ViralScore,
+  EmbargoCheck 
+} from "@/lib/ai-service";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -160,6 +168,15 @@ export default function HomeScreen() {
   
   // SUGGERIMENTI ORARIO
   const [showBestTimeModal, setShowBestTimeModal] = useState(false);
+  
+  // AI FEATURES
+  const [showAiSubjectModal, setShowAiSubjectModal] = useState(false);
+  const [subjectSuggestions, setSubjectSuggestions] = useState<any[]>([]);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [viralScore, setViralScore] = useState<any | null>(null);
+  const [showViralModal, setShowViralModal] = useState(false);
+  const [embargoCheck, setEmbargoCheck] = useState<any | null>(null);
+  const [showEmbargoModal, setShowEmbargoModal] = useState(false);
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -849,11 +866,32 @@ export default function HomeScreen() {
             </View>
           </View>
           
-          {/* Title Input */}
+          {/* Title Input with AI Optimizer */}
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.inputLabel}>
-              Titolo <ThemedText style={styles.required}>*</ThemedText>
-            </ThemedText>
+            <View style={styles.inputLabelRow}>
+              <ThemedText style={styles.inputLabel}>
+                Titolo <ThemedText style={styles.required}>*</ThemedText>
+              </ThemedText>
+              <Pressable
+                style={styles.aiButton}
+                onPress={async () => {
+                  if (!title.trim()) {
+                    Alert.alert('Inserisci un titolo', 'Scrivi prima un titolo per ricevere suggerimenti AI');
+                    return;
+                  }
+                  setLoadingAi(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  const suggestions = await getSubjectSuggestions(title, category);
+                  setSubjectSuggestions(suggestions);
+                  setShowAiSubjectModal(true);
+                  setLoadingAi(false);
+                }}
+              >
+                <ThemedText style={styles.aiButtonText}>
+                  {loadingAi ? '⏳' : '🤖'} AI Ottimizza
+                </ThemedText>
+              </Pressable>
+            </View>
             <TextInput
               style={styles.input}
               placeholder="Es: Lancio del nuovo prodotto XYZ"
@@ -892,9 +930,28 @@ export default function HomeScreen() {
               numberOfLines={12}
               textAlignVertical="top"
             />
-            <ThemedText style={styles.charCount}>
-              {content.length} caratteri
-            </ThemedText>
+            <View style={styles.charCountRow}>
+              <ThemedText style={styles.charCount}>
+                {content.length} caratteri
+              </ThemedText>
+              <Pressable
+                style={[styles.aiButton, { backgroundColor: '#E8F5E9' }]}
+                onPress={() => {
+                  if (!title.trim() || !content.trim()) {
+                    Alert.alert('Compila i campi', 'Inserisci titolo e contenuto per calcolare il potenziale virale');
+                    return;
+                  }
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  const score = calculateViralScore(title, content, filteredCount, selectedImages.length > 0);
+                  setViralScore(score);
+                  setShowViralModal(true);
+                }}
+              >
+                <ThemedText style={[styles.aiButtonText, { color: '#2E7D32' }]}>
+                  🚀 Viral Score
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
 
           {/* Images Section */}
@@ -1014,6 +1071,19 @@ export default function HomeScreen() {
                 <Pressable style={styles.dateTimeBtn} onPress={() => setShowTimePicker(true)}>
                   <ThemedText style={styles.dateTimeBtnText}>
                     ⏱ {scheduledDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                  </ThemedText>
+                </Pressable>
+                <Pressable 
+                  style={[styles.dateTimeBtn, { backgroundColor: '#E3F2FD' }]} 
+                  onPress={() => {
+                    const check = checkEmbargoZones(scheduledDate, ['IT']);
+                    setEmbargoCheck(check);
+                    setShowEmbargoModal(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
+                >
+                  <ThemedText style={[styles.dateTimeBtnText, { color: '#1565C0' }]}>
+                    🌍 Check Embargo
                   </ThemedText>
                 </Pressable>
               </View>
@@ -1562,6 +1632,278 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* AI Subject Optimizer Modal */}
+      <Modal
+        visible={showAiSubjectModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAiSubjectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>🤖 AI Subject Optimizer</ThemedText>
+              <Pressable onPress={() => setShowAiSubjectModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            <ScrollView style={{ maxHeight: 400, padding: 16 }}>
+              <ThemedText style={{ fontSize: 14, color: "#666", marginBottom: 16 }}>
+                Suggerimenti basati su pattern di apertura e best practice:
+              </ThemedText>
+              
+              {subjectSuggestions.map((suggestion, idx) => (
+                <Pressable
+                  key={idx}
+                  style={{
+                    backgroundColor: "#F8F9FA",
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 12,
+                    borderLeftWidth: 4,
+                    borderLeftColor: suggestion.score >= 80 ? "#4CAF50" : suggestion.score >= 60 ? "#FFC107" : "#2196F3",
+                  }}
+                  onPress={() => {
+                    setTitle(suggestion.subject);
+                    setShowAiSubjectModal(false);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                    <ThemedText style={{ fontSize: 14, fontWeight: "700", color: "#333", flex: 1 }}>
+                      {suggestion.subject}
+                    </ThemedText>
+                    <View style={{
+                      backgroundColor: suggestion.score >= 80 ? "#E8F5E9" : suggestion.score >= 60 ? "#FFF8E1" : "#E3F2FD",
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 8,
+                      marginLeft: 8,
+                    }}>
+                      <ThemedText style={{ fontSize: 12, fontWeight: "700", color: suggestion.score >= 80 ? "#2E7D32" : suggestion.score >= 60 ? "#F57C00" : "#1565C0" }}>
+                        {suggestion.score}%
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText style={{ fontSize: 12, color: "#666" }}>
+                    {suggestion.reason}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              
+              <ThemedText style={{ fontSize: 12, color: "#999", textAlign: "center", marginTop: 8 }}>
+                Tocca un suggerimento per applicarlo
+              </ThemedText>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Viral Score Modal */}
+      <Modal
+        visible={showViralModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowViralModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>🚀 Viral Potential Score</ThemedText>
+              <Pressable onPress={() => setShowViralModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            {viralScore && (
+              <ScrollView style={{ padding: 16 }}>
+                {/* Score Circle */}
+                <View style={{ alignItems: "center", marginBottom: 24 }}>
+                  <View style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
+                    backgroundColor: viralScore.score >= 70 ? "#E8F5E9" : viralScore.score >= 50 ? "#FFF8E1" : "#FFEBEE",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    borderWidth: 4,
+                    borderColor: viralScore.score >= 70 ? "#4CAF50" : viralScore.score >= 50 ? "#FFC107" : "#EF5350",
+                  }}>
+                    <ThemedText style={{
+                      fontSize: 36,
+                      fontWeight: "800",
+                      color: viralScore.score >= 70 ? "#2E7D32" : viralScore.score >= 50 ? "#F57C00" : "#C62828",
+                    }}>
+                      {viralScore.score}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: "#666" }}>/ 100</ThemedText>
+                  </View>
+                  <ThemedText style={{ fontSize: 14, color: "#666", marginTop: 12, textAlign: "center" }}>
+                    {viralScore.recommendation}
+                  </ThemedText>
+                </View>
+                
+                {/* Factors */}
+                <ThemedText style={{ fontSize: 16, fontWeight: "700", marginBottom: 12 }}>
+                  📊 Analisi Fattori
+                </ThemedText>
+                {viralScore.factors.map((factor: any, idx: number) => (
+                  <View key={idx} style={{
+                    backgroundColor: "#F8F9FA",
+                    borderRadius: 12,
+                    padding: 12,
+                    marginBottom: 8,
+                  }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                      <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{factor.name}</ThemedText>
+                      <ThemedText style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: factor.score >= 70 ? "#2E7D32" : factor.score >= 50 ? "#F57C00" : "#C62828",
+                      }}>
+                        {factor.score}%
+                      </ThemedText>
+                    </View>
+                    <View style={{ height: 6, backgroundColor: "#E0E0E0", borderRadius: 3, marginBottom: 8 }}>
+                      <View style={{
+                        height: 6,
+                        width: `${factor.score}%`,
+                        backgroundColor: factor.score >= 70 ? "#4CAF50" : factor.score >= 50 ? "#FFC107" : "#EF5350",
+                        borderRadius: 3,
+                      }} />
+                    </View>
+                    <ThemedText style={{ fontSize: 12, color: "#666" }}>
+                      💡 {factor.tip}
+                    </ThemedText>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Smart Embargo Modal */}
+      <Modal
+        visible={showEmbargoModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEmbargoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>🌍 Smart Embargo Zones</ThemedText>
+              <Pressable onPress={() => setShowEmbargoModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            {embargoCheck && (
+              <ScrollView style={{ padding: 16 }}>
+                {/* Status */}
+                <View style={{
+                  backgroundColor: embargoCheck.isSafe ? "#E8F5E9" : "#FFF3E0",
+                  borderRadius: 16,
+                  padding: 20,
+                  alignItems: "center",
+                  marginBottom: 20,
+                }}>
+                  <ThemedText style={{ fontSize: 48 }}>
+                    {embargoCheck.isSafe ? "✅" : "⚠️"}
+                  </ThemedText>
+                  <ThemedText style={{
+                    fontSize: 18,
+                    fontWeight: "700",
+                    color: embargoCheck.isSafe ? "#2E7D32" : "#E65100",
+                    marginTop: 8,
+                  }}>
+                    {embargoCheck.isSafe ? "Orario Ottimale!" : "Attenzione: Possibili Problemi"}
+                  </ThemedText>
+                </View>
+                
+                {/* Warnings */}
+                {embargoCheck.warnings.length > 0 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <ThemedText style={{ fontSize: 16, fontWeight: "700", marginBottom: 12 }}>
+                      ⚠️ Avvisi
+                    </ThemedText>
+                    {embargoCheck.warnings.map((warning: string, idx: number) => (
+                      <View key={idx} style={{
+                        backgroundColor: "#FFF8E1",
+                        borderRadius: 12,
+                        padding: 12,
+                        marginBottom: 8,
+                        borderLeftWidth: 4,
+                        borderLeftColor: "#FFC107",
+                      }}>
+                        <ThemedText style={{ fontSize: 14, color: "#333" }}>
+                          {warning}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                
+                {/* Suggestions */}
+                {embargoCheck.suggestions.length > 0 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <ThemedText style={{ fontSize: 16, fontWeight: "700", marginBottom: 12 }}>
+                      💡 Suggerimenti
+                    </ThemedText>
+                    {embargoCheck.suggestions.map((suggestion: string, idx: number) => (
+                      <View key={idx} style={{
+                        backgroundColor: "#E3F2FD",
+                        borderRadius: 12,
+                        padding: 12,
+                        marginBottom: 8,
+                      }}>
+                        <ThemedText style={{ fontSize: 14, color: "#1565C0" }}>
+                          {suggestion}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                
+                {/* Best Time Suggestion */}
+                {embargoCheck.bestTime && (
+                  <Pressable
+                    style={{
+                      backgroundColor: "#E8F5E9",
+                      borderRadius: 16,
+                      padding: 16,
+                      alignItems: "center",
+                      borderWidth: 2,
+                      borderColor: "#4CAF50",
+                    }}
+                    onPress={() => {
+                      setScheduledDate(embargoCheck.bestTime);
+                      setShowEmbargoModal(false);
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }}
+                  >
+                    <ThemedText style={{ fontSize: 14, color: "#666", marginBottom: 4 }}>
+                      Orario consigliato:
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 18, fontWeight: "700", color: "#2E7D32" }}>
+                      {embargoCheck.bestTime.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 16, color: "#2E7D32" }}>
+                      ore {embargoCheck.bestTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: "#666", marginTop: 8 }}>
+                      Tocca per applicare questo orario
+                    </ThemedText>
+                  </Pressable>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating Send Button */}
       <View
         style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}
@@ -1792,6 +2134,12 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 8,
   },
+  inputLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   required: {
     color: "#E53935",
   },
@@ -1829,6 +2177,23 @@ const styles = StyleSheet.create({
     color: "#9E9E9E",
     textAlign: "right",
     marginTop: 6,
+  },
+  charCountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  aiButton: {
+    backgroundColor: "#E3F2FD",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  aiButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1565C0",
   },
   
   // Image Section
