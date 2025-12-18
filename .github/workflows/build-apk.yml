@@ -18,14 +18,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Usa Node.js 18 per la compatibilità con pnpm ed ES Module
+          node-version: 18
 
       - name: Install dependencies
         run: |
           npm install -g pnpm
           pnpm install
 
-            - name: Build APK
+      - name: Build APK
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
@@ -35,4 +35,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
-          path: dist/app-release.apk # Aggiorna con il path del file APK
+          path: dist/app-release.apk
+          
