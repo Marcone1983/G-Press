@@ -1,11 +1,9 @@
-export default async () => {
-  const env = await import('./scripts/load-env.js').then((module) => module.default || module);
+const env = require('./scripts/load-env.js');
 
-  return {
-    name: "G-Press",
-    version: "1.0.0",
-    extra: {
-      ...env,
-    },
-  };
+module.exports = {
+  name: "G-Press",
+  version: "1.0.0",
+  extra: {
+    ...env,
+  },
 };
