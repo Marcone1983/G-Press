@@ -3,34 +3,60 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  Modal,
   View,
-  ScrollView,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useArticles, Article } from "@/hooks/use-storage";
+import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useAuth } from "@/hooks/use-auth";
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: "#9E9E9E",
+  scheduled: "#FF9800",
+  sending: "#2196F3",
+  sent: "#4CAF50",
+  failed: "#F44336",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Bozza",
+  scheduled: "Programmato",
+  sending: "In invio...",
+  sent: "Inviato",
+  failed: "Fallito",
+};
 
 export default function HistoryScreen() {
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const { articles, loading } = useArticles();
+  const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
-
   const backgroundColor = useThemeColor({}, "background");
-  const surfaceColor = useThemeColor({}, "surface");
-  const borderColor = useThemeColor({}, "border");
-  const tintColor = useThemeColor({}, "tint");
-  const textSecondaryColor = useThemeColor({}, "textSecondary");
-  const successColor = useThemeColor({}, "success");
+  
+  const { isAuthenticated } = useAuth();
+  
+  // Fetch press releases
+  const { data: pressReleases, isLoading, refetch } = trpc.pressReleases.list.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("it-IT", {
-      day: "numeric",
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return "N/A";
+    const d = new Date(date);
+    return d.toLocaleDateString("it-IT", {
+      day: "2-digit",
       month: "short",
       year: "numeric",
       hour: "2-digit",
@@ -38,113 +64,116 @@ export default function HistoryScreen() {
     });
   };
 
-  const renderArticle = ({ item }: { item: Article }) => (
-    <Pressable onPress={() => setSelectedArticle(item)}>
-      <ThemedView style={[styles.articleCard, { backgroundColor: surfaceColor }]}>
-        <View style={styles.articleHeader}>
-          <ThemedText style={styles.articleTitle} numberOfLines={2}>
+  const renderPressRelease = ({ item }: { item: any }) => (
+    <Pressable
+      style={styles.card}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Alert.alert(
+          item.title,
+          `${item.subtitle ? item.subtitle + "\n\n" : ""}${item.content.slice(0, 300)}${item.content.length > 300 ? "..." : ""}\n\n📧 Destinatari: ${item.recipientCount || 0}\n📅 Inviato: ${formatDate(item.sentAt)}`,
+          [{ text: "Chiudi" }]
+        );
+      }}
+    >
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleContainer}>
+          <ThemedText style={styles.cardTitle} numberOfLines={2}>
             {item.title}
           </ThemedText>
-          <View style={[styles.badge, { backgroundColor: successColor }]}>
-            <ThemedText style={styles.badgeText}>
-              {item.recipientCount}
+          {item.subtitle && (
+            <ThemedText style={styles.cardSubtitle} numberOfLines={1}>
+              {item.subtitle}
             </ThemedText>
-          </View>
+          )}
         </View>
-        <ThemedText
-          style={[styles.articlePreview, { color: textSecondaryColor }]}
-          numberOfLines={2}
-        >
-          {item.content}
-        </ThemedText>
-        <ThemedText style={[styles.articleDate, { color: textSecondaryColor }]}>
-          {formatDate(item.sentAt)}
-        </ThemedText>
-      </ThemedView>
+        <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || "#9E9E9E" }]}>
+          <ThemedText style={styles.statusText}>
+            {STATUS_LABELS[item.status] || item.status}
+          </ThemedText>
+        </View>
+      </View>
+      
+      <ThemedText style={styles.cardContent} numberOfLines={2}>
+        {item.content}
+      </ThemedText>
+      
+      <View style={styles.cardFooter}>
+        <View style={styles.footerItem}>
+          <ThemedText style={styles.footerLabel}>Destinatari</ThemedText>
+          <ThemedText style={styles.footerValue}>{item.recipientCount || 0}</ThemedText>
+        </View>
+        <View style={styles.footerItem}>
+          <ThemedText style={styles.footerLabel}>Data</ThemedText>
+          <ThemedText style={styles.footerValue}>
+            {formatDate(item.sentAt || item.createdAt)}
+          </ThemedText>
+        </View>
+        {item.category && (
+          <View style={styles.footerItem}>
+            <ThemedText style={styles.footerLabel}>Categoria</ThemedText>
+            <ThemedText style={styles.footerValue}>{item.category}</ThemedText>
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 
-  const renderEmptyList = () => (
-    <ThemedView style={styles.emptyContainer}>
-      <IconSymbol name="clock.fill" size={64} color={textSecondaryColor} />
-      <ThemedText style={[styles.emptyTitle, { color: textSecondaryColor }]}>
-        Nessun articolo inviato
-      </ThemedText>
-      <ThemedText style={[styles.emptySubtitle, { color: textSecondaryColor }]}>
-        Gli articoli che invierai appariranno qui
-      </ThemedText>
-    </ThemedView>
-  );
+  if (!isAuthenticated) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor }]}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
+          <ThemedText style={styles.title}>Storico Invii</ThemedText>
+        </View>
+        <View style={styles.emptyContainer}>
+          <ThemedText style={styles.emptyTitle}>Accesso richiesto</ThemedText>
+          <ThemedText style={styles.emptyText}>
+            Effettua il login per visualizzare lo storico dei tuoi comunicati stampa.
+          </ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
-      <FlatList
-        data={articles}
-        keyExtractor={(item) => item.id}
-        renderItem={renderArticle}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: Math.max(insets.bottom, 16) },
-        ]}
-        ListEmptyComponent={loading ? null : renderEmptyList}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-      />
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
+        <ThemedText style={styles.title}>Storico Invii</ThemedText>
+        <ThemedText style={styles.subtitle}>
+          {pressReleases?.length || 0} comunicati
+        </ThemedText>
+      </View>
 
-      {/* Article Detail Modal */}
-      <Modal
-        visible={selectedArticle !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedArticle(null)}
-      >
-        <ThemedView style={[styles.modalContainer, { backgroundColor }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: borderColor }]}>
-            <View style={{ width: 60 }} />
-            <ThemedText style={styles.modalTitle}>Dettaglio</ThemedText>
-            <Pressable
-              onPress={() => setSelectedArticle(null)}
-              style={styles.closeButton}
-            >
-              <ThemedText style={[styles.closeText, { color: tintColor }]}>
-                Chiudi
+      {/* List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1E88E5" />
+          <ThemedText style={styles.loadingText}>Caricamento storico...</ThemedText>
+        </View>
+      ) : (
+        <FlatList
+          data={pressReleases}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderPressRelease}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 60 }
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <ThemedText style={styles.emptyTitle}>Nessun comunicato</ThemedText>
+              <ThemedText style={styles.emptyText}>
+                I comunicati stampa inviati appariranno qui.
               </ThemedText>
-            </Pressable>
-          </View>
-
-          {selectedArticle && (
-            <ScrollView
-              style={styles.modalScroll}
-              contentContainerStyle={[
-                styles.modalContent,
-                { paddingBottom: Math.max(insets.bottom, 20) },
-              ]}
-            >
-              <ThemedText style={styles.detailTitle}>
-                {selectedArticle.title}
-              </ThemedText>
-
-              <View style={styles.metaRow}>
-                <View style={[styles.metaBadge, { backgroundColor: successColor }]}>
-                  <IconSymbol name="checkmark.circle.fill" size={16} color="#FFFFFF" />
-                  <ThemedText style={styles.metaBadgeText}>
-                    Inviato a {selectedArticle.recipientCount} contatti
-                  </ThemedText>
-                </View>
-              </View>
-
-              <ThemedText style={[styles.detailDate, { color: textSecondaryColor }]}>
-                {formatDate(selectedArticle.sentAt)}
-              </ThemedText>
-
-              <View style={[styles.divider, { backgroundColor: borderColor }]} />
-
-              <ThemedText style={styles.detailContent}>
-                {selectedArticle.content}
-              </ThemedText>
-            </ScrollView>
-          )}
-        </ThemedView>
-      </Modal>
+            </View>
+          }
+        />
+      )}
     </ThemedView>
   );
 }
@@ -153,125 +182,118 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#4CAF50",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
   listContent: {
     padding: 16,
   },
-  articleCard: {
-    padding: 16,
+  card: {
+    backgroundColor: "#FFF",
     borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  articleHeader: {
+  cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 8,
   },
-  articleTitle: {
-    fontSize: 17,
-    fontWeight: "600",
+  cardTitleContainer: {
     flex: 1,
     marginRight: 12,
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#333",
     lineHeight: 22,
   },
-  badge: {
+  cardSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
+  statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    minWidth: 32,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  cardContent: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    paddingTop: 12,
+    gap: 16,
+  },
+  footerItem: {
+    flex: 1,
+  },
+  footerLabel: {
+    fontSize: 11,
+    color: "#999",
+    marginBottom: 2,
+  },
+  footerValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
   },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  articlePreview: {
-    fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  articleDate: {
-    fontSize: 13,
+  loadingText: {
+    marginTop: 12,
+    color: "#666",
   },
   emptyContainer: {
     flex: 1,
+    padding: 40,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
-    paddingTop: 80,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: "600",
-    marginTop: 16,
+    color: "#333",
     marginBottom: 8,
   },
-  emptySubtitle: {
-    fontSize: 16,
+  emptyText: {
+    fontSize: 15,
+    color: "#666",
     textAlign: "center",
-    lineHeight: 24,
-  },
-  modalContainer: {
-    flex: 1,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  closeButton: {
-    width: 60,
-    alignItems: "flex-end",
-  },
-  closeText: {
-    fontSize: 17,
-  },
-  modalScroll: {
-    flex: 1,
-  },
-  modalContent: {
-    padding: 20,
-  },
-  detailTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    lineHeight: 30,
-    marginBottom: 16,
-  },
-  metaRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
-  },
-  metaBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  detailDate: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-  },
-  detailContent: {
-    fontSize: 16,
-    lineHeight: 26,
+    lineHeight: 22,
   },
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   StyleSheet,
   TextInput,
@@ -8,31 +8,79 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import * as Linking from "expo-linking";
+import { Picker } from "@react-native-picker/picker";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { useContacts, useArticles } from "@/hooks/use-storage";
+import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/hooks/use-theme-color";
+
+const CATEGORIES = [
+  { label: "Tutte le categorie", value: "all" },
+  { label: "Tecnologia", value: "technology" },
+  { label: "Business", value: "business" },
+  { label: "Finanza", value: "finance" },
+  { label: "Salute", value: "health" },
+  { label: "Sport", value: "sports" },
+  { label: "Intrattenimento", value: "entertainment" },
+  { label: "Politica", value: "politics" },
+  { label: "Lifestyle", value: "lifestyle" },
+  { label: "Generale", value: "general" },
+];
+
+const COUNTRIES = [
+  { label: "Tutti i paesi", value: "all" },
+  { label: "🇮🇹 Italia", value: "IT" },
+  { label: "🇺🇸 USA", value: "US" },
+  { label: "🇬🇧 Regno Unito", value: "GB" },
+  { label: "🇫🇷 Francia", value: "FR" },
+  { label: "🇩🇪 Germania", value: "DE" },
+  { label: "🇪🇸 Spagna", value: "ES" },
+  { label: "🇨🇦 Canada", value: "CA" },
+  { label: "🇦🇺 Australia", value: "AU" },
+  { label: "🇯🇵 Giappone", value: "JP" },
+  { label: "🇮🇳 India", value: "IN" },
+  { label: "🇧🇷 Brasile", value: "BR" },
+  { label: "🇲🇽 Messico", value: "MX" },
+  { label: "🇦🇷 Argentina", value: "AR" },
+];
 
 export default function HomeScreen() {
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [content, setContent] = useState("");
+  const [category, setCategory] = useState("all");
+  const [country, setCountry] = useState("all");
+  const [boilerplate, setBoilerplate] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [sending, setSending] = useState(false);
   
-  const { contacts, loading: contactsLoading } = useContacts();
-  const { addArticle } = useArticles();
   const insets = useSafeAreaInsets();
   
+  // Get journalist count
+  const { data: journalistCount, isLoading: countLoading } = trpc.journalists.count.useQuery();
+  
+  // Get journalists filtered by category and country
+  const { data: journalists } = trpc.journalists.list.useQuery({
+    category: category !== "all" ? category : undefined,
+    country: country !== "all" ? country : undefined,
+    isActive: true,
+  });
+  
+  const filteredCount = journalists?.length ?? 0;
+  
+  // Create press release mutation
+  const createPressRelease = trpc.pressReleases.create.useMutation();
+  const sendPressRelease = trpc.pressReleases.send.useMutation();
+  
   const backgroundColor = useThemeColor({}, "background");
-  const surfaceColor = useThemeColor({}, "surface");
-  const borderColor = useThemeColor({}, "border");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
-  const textSecondaryColor = useThemeColor({}, "textSecondary");
 
   const handleSend = async () => {
     if (!title.trim()) {
@@ -43,66 +91,68 @@ export default function HomeScreen() {
       Alert.alert("Errore", "Inserisci il contenuto dell'articolo");
       return;
     }
-    if (contacts.length === 0) {
-      Alert.alert(
-        "Nessun contatto",
-        "Aggiungi almeno un contatto nella sezione Contatti prima di inviare"
-      );
+    if (filteredCount === 0) {
+      Alert.alert("Errore", "Nessun giornalista trovato per i filtri selezionati");
       return;
     }
 
-    setSending(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const categoryLabel = CATEGORIES.find(c => c.value === category)?.label || "";
+    const countryLabel = COUNTRIES.find(c => c.value === country)?.label || "";
+    
+    Alert.alert(
+      "Conferma Invio",
+      `Stai per inviare "${title}" a ${filteredCount} giornalisti.\n\nFiltri: ${categoryLabel}${country !== "all" ? `, ${countryLabel}` : ""}\n\nContinuare?`,
+      [
+        { text: "Annulla", style: "cancel" },
+        {
+          text: "Invia",
+          onPress: async () => {
+            setSending(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    try {
-      // Build email content
-      const subject = encodeURIComponent(title.trim());
-      const body = encodeURIComponent(content.trim());
-      const emails = contacts.map((c) => c.email).join(",");
-      
-      // Create mailto link
-      const mailtoUrl = `mailto:${emails}?subject=${subject}&body=${body}`;
-      
-      // Check if we can open mail
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-        
-        // Save to history
-        await addArticle({
-          title: title.trim(),
-          content: content.trim(),
-          recipientCount: contacts.length,
-        });
+            try {
+              const pressReleaseId = await createPressRelease.mutateAsync({
+                title: title.trim(),
+                subtitle: subtitle.trim() || undefined,
+                content: content.trim(),
+                category: category !== "all" ? category as any : undefined,
+                boilerplate: boilerplate.trim() || undefined,
+                contactName: contactName.trim() || undefined,
+                contactEmail: contactEmail.trim() || undefined,
+              });
 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        Alert.alert(
-          "Articolo Pronto",
-          `L'app email si è aperta con ${contacts.length} destinatari. Premi Invia per completare.`,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setTitle("");
-                setContent("");
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert(
-          "Errore",
-          "Impossibile aprire l'app email. Assicurati di avere un'app email configurata."
-        );
-      }
-    } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Errore", "Si è verificato un errore durante l'invio");
-    } finally {
-      setSending(false);
-    }
+              const result = await sendPressRelease.mutateAsync({
+                pressReleaseId,
+                categoryFilter: category !== "all" ? category : undefined,
+              });
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+              Alert.alert(
+                "Invio Completato",
+                `Comunicato inviato con successo!\n\n✅ Inviati: ${result.totalSent}\n❌ Falliti: ${result.totalFailed}`,
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      setTitle("");
+                      setSubtitle("");
+                      setContent("");
+                      setBoilerplate("");
+                    },
+                  },
+                ]
+              );
+            } catch (error: any) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert("Errore", error.message || "Si è verificato un errore durante l'invio");
+            } finally {
+              setSending(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -115,98 +165,172 @@ export default function HomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom, 20) + 100 },
+          { 
+            paddingTop: Math.max(insets.top, 16) + 8,
+            paddingBottom: Math.max(insets.bottom, 20) + 100 
+          },
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Recipient Counter */}
-        <ThemedView style={[styles.counterCard, { backgroundColor: surfaceColor }]}>
-          <ThemedText style={[styles.counterLabel, { color: textSecondaryColor }]}>
-            Destinatari
-          </ThemedText>
-          <ThemedText style={[styles.counterValue, { color: tintColor }]}>
-            {contactsLoading ? "..." : contacts.length}
-          </ThemedText>
-          <ThemedText style={[styles.counterHint, { color: textSecondaryColor }]}>
-            {contacts.length === 0
-              ? "Aggiungi contatti per iniziare"
-              : contacts.length === 1
-              ? "contatto"
-              : "contatti"}
-          </ThemedText>
-        </ThemedView>
+        {/* Header */}
+        <View style={styles.header}>
+          <ThemedText style={styles.headerTitle}>G-Press</ThemedText>
+          <ThemedText style={styles.headerSubtitle}>Distribuzione Comunicati Stampa</ThemedText>
+        </View>
+
+        {/* Stats Card */}
+        <View style={[styles.statsCard, { backgroundColor: "#1E88E5" }]}>
+          <View style={styles.statItem}>
+            <ThemedText style={styles.statValue}>
+              {countLoading ? "..." : journalistCount ?? 0}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>
+              Giornalisti Totali
+            </ThemedText>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <ThemedText style={[styles.statValue, { color: "#4CAF50" }]}>
+              {filteredCount}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>
+              Destinatari
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Filters */}
+        <View style={styles.filtersRow}>
+          <View style={styles.filterItem}>
+            <ThemedText style={styles.filterLabel}>Categoria</ThemedText>
+            <View style={[styles.pickerContainer, { borderColor: "#E0E0E0" }]}>
+              <Picker
+                selectedValue={category}
+                onValueChange={setCategory}
+                style={[styles.picker, { color: textColor }]}
+              >
+                {CATEGORIES.map((cat) => (
+                  <Picker.Item key={cat.value} label={cat.label} value={cat.value} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+          <View style={styles.filterItem}>
+            <ThemedText style={styles.filterLabel}>Paese</ThemedText>
+            <View style={[styles.pickerContainer, { borderColor: "#E0E0E0" }]}>
+              <Picker
+                selectedValue={country}
+                onValueChange={setCountry}
+                style={[styles.picker, { color: textColor }]}
+              >
+                {COUNTRIES.map((c) => (
+                  <Picker.Item key={c.value} label={c.label} value={c.value} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+        </View>
 
         {/* Title Input */}
-        <ThemedView style={styles.inputGroup}>
+        <View style={styles.inputGroup}>
           <ThemedText style={styles.label}>Titolo *</ThemedText>
           <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: surfaceColor,
-                borderColor,
-                color: textColor,
-              },
-            ]}
+            style={[styles.input, { borderColor: "#E0E0E0", color: textColor }]}
             placeholder="Titolo del comunicato stampa"
-            placeholderTextColor={textSecondaryColor}
+            placeholderTextColor="#999"
             value={title}
             onChangeText={setTitle}
-            maxLength={200}
+            maxLength={500}
           />
-        </ThemedView>
+        </View>
+
+        {/* Subtitle Input */}
+        <View style={styles.inputGroup}>
+          <ThemedText style={styles.label}>Sottotitolo</ThemedText>
+          <TextInput
+            style={[styles.input, { borderColor: "#E0E0E0", color: textColor }]}
+            placeholder="Sottotitolo o sommario (opzionale)"
+            placeholderTextColor="#999"
+            value={subtitle}
+            onChangeText={setSubtitle}
+            maxLength={500}
+          />
+        </View>
 
         {/* Content Input */}
-        <ThemedView style={styles.inputGroup}>
+        <View style={styles.inputGroup}>
           <ThemedText style={styles.label}>Contenuto *</ThemedText>
           <TextInput
-            style={[
-              styles.textArea,
-              {
-                backgroundColor: surfaceColor,
-                borderColor,
-                color: textColor,
-              },
-            ]}
-            placeholder="Scrivi qui il tuo articolo o comunicato stampa..."
-            placeholderTextColor={textSecondaryColor}
+            style={[styles.textArea, { borderColor: "#E0E0E0", color: textColor }]}
+            placeholder="Scrivi qui il tuo comunicato stampa..."
+            placeholderTextColor="#999"
             value={content}
             onChangeText={setContent}
             multiline
-            numberOfLines={10}
+            numberOfLines={12}
             textAlignVertical="top"
           />
-        </ThemedView>
+        </View>
+
+        {/* Boilerplate */}
+        <View style={styles.inputGroup}>
+          <ThemedText style={styles.label}>Nota Aziendale</ThemedText>
+          <TextInput
+            style={[styles.textAreaSmall, { borderColor: "#E0E0E0", color: textColor }]}
+            placeholder="Breve descrizione dell'azienda (opzionale)"
+            placeholderTextColor="#999"
+            value={boilerplate}
+            onChangeText={setBoilerplate}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Contact Info */}
+        <View style={[styles.contactSection, { backgroundColor: "#F5F5F5" }]}>
+          <ThemedText style={styles.sectionTitle}>Contatti per la Stampa</ThemedText>
+          <TextInput
+            style={[styles.input, { backgroundColor: "#FFF", borderColor: "#E0E0E0", color: textColor }]}
+            placeholder="Nome contatto"
+            placeholderTextColor="#999"
+            value={contactName}
+            onChangeText={setContactName}
+          />
+          <TextInput
+            style={[styles.input, { backgroundColor: "#FFF", borderColor: "#E0E0E0", color: textColor, marginTop: 12 }]}
+            placeholder="Email contatto"
+            placeholderTextColor="#999"
+            value={contactEmail}
+            onChangeText={setContactEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </View>
       </ScrollView>
 
-      {/* Send Button - Fixed at bottom */}
-      <ThemedView
-        style={[
-          styles.buttonContainer,
-          {
-            backgroundColor,
-            paddingBottom: Math.max(insets.bottom, 16),
-          },
-        ]}
+      {/* Send Button */}
+      <View
+        style={[styles.buttonContainer, { backgroundColor, paddingBottom: Math.max(insets.bottom, 16) }]}
       >
         <Pressable
           style={[
             styles.sendButton,
-            { backgroundColor: tintColor },
-            (sending || contacts.length === 0) && styles.sendButtonDisabled,
+            { backgroundColor: "#4CAF50" },
+            (sending || filteredCount === 0) && styles.sendButtonDisabled,
           ]}
           onPress={handleSend}
-          disabled={sending || contacts.length === 0}
+          disabled={sending || filteredCount === 0}
         >
           {sending ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <ThemedText style={styles.sendButtonText}>
-              Invia a Tutti ({contacts.length})
+              📤 Invia a {filteredCount} Giornalisti
             </ThemedText>
           )}
         </Pressable>
-      </ThemedView>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -221,24 +345,67 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
-  counterCard: {
-    alignItems: "center",
+  header: {
+    marginBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#4CAF50",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 2,
+  },
+  statsCard: {
+    flexDirection: "row",
     padding: 20,
     borderRadius: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
-  counterLabel: {
-    fontSize: 14,
-    marginBottom: 4,
+  statItem: {
+    flex: 1,
+    alignItems: "center",
   },
-  counterValue: {
-    fontSize: 48,
+  statDivider: {
+    width: 1,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    marginHorizontal: 16,
+  },
+  statValue: {
+    fontSize: 32,
     fontWeight: "bold",
-    lineHeight: 56,
+    color: "#FFFFFF",
+    lineHeight: 40,
   },
-  counterHint: {
-    fontSize: 14,
+  statLabel: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.9)",
     marginTop: 4,
+    textAlign: "center",
+  },
+  filtersRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  filterItem: {
+    flex: 1,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#FFF",
+  },
+  picker: {
+    height: 44,
   },
   inputGroup: {
     marginBottom: 16,
@@ -253,6 +420,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    backgroundColor: "#FFF",
   },
   textArea: {
     borderWidth: 1,
@@ -260,6 +428,25 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     minHeight: 200,
+    backgroundColor: "#FFF",
+  },
+  textAreaSmall: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 100,
+    backgroundColor: "#FFF",
+  },
+  contactSection: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
   },
   buttonContainer: {
     padding: 16,
@@ -268,7 +455,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -278,6 +465,6 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: "#FFFFFF",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

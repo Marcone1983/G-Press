@@ -5,9 +5,9 @@
 
 import { Platform } from "react-native";
 
-// Primary colors
-const primaryBlue = "#1E88E5";
-const primaryBlueDark = "#1565C0";
+// Primary colors - Green to match G-Press logo
+const primaryGreen = "#4CAF50";
+const primaryGreenDark = "#388E3C";
 
 export const Colors = {
   light: {
@@ -15,10 +15,10 @@ export const Colors = {
     textSecondary: "#757575",
     background: "#FFFFFF",
     surface: "#F5F5F5",
-    tint: primaryBlue,
+    tint: primaryGreen,
     icon: "#757575",
     tabIconDefault: "#757575",
-    tabIconSelected: primaryBlue,
+    tabIconSelected: primaryGreen,
     success: "#43A047",
     danger: "#E53935",
     border: "#E0E0E0",
@@ -28,10 +28,10 @@ export const Colors = {
     textSecondary: "#9BA1A6",
     background: "#151718",
     surface: "#1E1E1E",
-    tint: primaryBlue,
+    tint: primaryGreen,
     icon: "#9BA1A6",
     tabIconDefault: "#9BA1A6",
-    tabIconSelected: primaryBlue,
+    tabIconSelected: primaryGreen,
     success: "#66BB6A",
     danger: "#EF5350",
     border: "#333333",
