@@ -178,3 +178,8 @@
 - [x] Estrarre email pubbliche visibili
 - [x] Aggiornare UI Contatti con nuova funzione
 - [x] Sostituire import LinkedIn con scraping testate
+
+
+## Bug Fix e Miglioramenti
+- [x] Correggere errore expo-file-system deprecato per import CSV
+- [x] Aggiungere tasto Copia nell'anteprima articolo

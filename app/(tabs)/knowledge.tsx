@@ -14,7 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Clipboard from 'expo-clipboard';
 import { generateArticle, checkApiHealth, type Document, type CompanyInfo, type ArticleFormat, type GeneratedArticle } from '@/lib/vercel-api';
 
 const STORAGE_KEYS = {
@@ -454,6 +455,18 @@ export default function KnowledgeScreen() {
               </View>
               <Text style={styles.previewContent}>{selectedArticle.content}</Text>
 
+              {/* Tasto Copia */}
+              <Pressable
+                style={styles.copyButton}
+                onPress={async () => {
+                  const fullText = `${selectedArticle.title}\n\n${selectedArticle.subtitle}\n\n${selectedArticle.content}`;
+                  await Clipboard.setStringAsync(fullText);
+                  Alert.alert('✅ Copiato!', 'L\'articolo è stato copiato negli appunti');
+                }}
+              >
+                <Text style={styles.copyButtonText}>📋 Copia Articolo</Text>
+              </Pressable>
+
               <View style={styles.previewActions}>
                 {selectedArticle.status === 'draft' && (
                   <Pressable
@@ -791,6 +804,18 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 24,
     marginBottom: 30,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  copyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   previewActions: {
     flexDirection: 'row',
