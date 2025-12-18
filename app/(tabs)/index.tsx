@@ -34,6 +34,11 @@ import {
   ViralScore,
   EmbargoCheck 
 } from "@/lib/ai-service";
+import {
+  getGeneratedArticles,
+  GeneratedArticle,
+  getFormatLabel,
+} from "@/lib/knowledge-base";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -178,6 +183,10 @@ export default function HomeScreen() {
   const [embargoCheck, setEmbargoCheck] = useState<any | null>(null);
   const [showEmbargoModal, setShowEmbargoModal] = useState(false);
   
+  // AI JOURNALIST - Articoli approvati
+  const [approvedArticles, setApprovedArticles] = useState<GeneratedArticle[]>([]);
+  const [showApprovedArticlesModal, setShowApprovedArticlesModal] = useState(false);
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
@@ -188,7 +197,19 @@ export default function HomeScreen() {
     loadJournalists();
     loadTemplates();
     loadGroups();
+    loadApprovedArticles();
   }, []);
+  
+  // Load approved articles from AI Journalist
+  const loadApprovedArticles = async () => {
+    try {
+      const articles = await getGeneratedArticles();
+      const approved = articles.filter(a => a.status === "approved");
+      setApprovedArticles(approved);
+    } catch (error) {
+      console.error("Error loading approved articles:", error);
+    }
+  };
 
   const loadTemplates = async () => {
     try {
@@ -722,6 +743,19 @@ export default function HomeScreen() {
               <ThemedText style={styles.quickActionIcon}>🇮🇹</ThemedText>
               <ThemedText style={styles.quickActionText}>Solo Italia</ThemedText>
             </Pressable>
+            
+            {approvedArticles.length > 0 && (
+              <Pressable
+                style={[styles.quickAction, { backgroundColor: '#E8F5E9', borderWidth: 2, borderColor: '#4CAF50' }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  setShowApprovedArticlesModal(true);
+                }}
+              >
+                <ThemedText style={styles.quickActionIcon}>🤖</ThemedText>
+                <ThemedText style={[styles.quickActionText, { color: '#2E7D32' }]}>Articoli AI ({approvedArticles.length})</ThemedText>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
 
@@ -1900,6 +1934,109 @@ export default function HomeScreen() {
                 )}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Approved AI Articles Modal */}
+      <Modal
+        visible={showApprovedArticlesModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowApprovedArticlesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>🤖 Articoli AI Approvati</ThemedText>
+              <Pressable onPress={() => setShowApprovedArticlesModal(false)}>
+                <ThemedText style={styles.modalClose}>✕</ThemedText>
+              </Pressable>
+            </View>
+            
+            <ScrollView style={{ padding: 16, maxHeight: 500 }}>
+              {approvedArticles.length === 0 ? (
+                <View style={{ alignItems: "center", padding: 32 }}>
+                  <ThemedText style={{ fontSize: 48, marginBottom: 16 }}>📝</ThemedText>
+                  <ThemedText style={{ fontSize: 16, fontWeight: "600", color: "#666", textAlign: "center" }}>
+                    Nessun articolo approvato
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 14, color: "#999", textAlign: "center", marginTop: 8 }}>
+                    Vai alla sezione AI Journalist per generare e approvare articoli
+                  </ThemedText>
+                </View>
+              ) : (
+                approvedArticles.map((article) => (
+                  <Pressable
+                    key={article.id}
+                    style={{
+                      backgroundColor: "#F8F9FA",
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 12,
+                      borderWidth: 2,
+                      borderColor: "#E8F5E9",
+                    }}
+                    onPress={() => {
+                      // Carica l'articolo nel form
+                      setTitle(article.title);
+                      setSubtitle(article.subtitle);
+                      setContent(article.content);
+                      setShowApprovedArticlesModal(false);
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      Alert.alert(
+                        "✅ Articolo Caricato",
+                        `"${article.title}" è stato caricato nel form. Puoi modificarlo e inviarlo ai giornalisti.`
+                      );
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", marginBottom: 8 }}>
+                      <View style={{
+                        backgroundColor: "#E8F5E9",
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                        marginRight: 8,
+                      }}>
+                        <ThemedText style={{ fontSize: 11, fontWeight: "600", color: "#2E7D32" }}>
+                          ✅ Approvato
+                        </ThemedText>
+                      </View>
+                      <View style={{
+                        backgroundColor: "#F3E5F5",
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                      }}>
+                        <ThemedText style={{ fontSize: 11, fontWeight: "600", color: "#6A1B9A" }}>
+                          {getFormatLabel(article.format)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <ThemedText style={{ fontSize: 16, fontWeight: "700", color: "#1A1A1A", marginBottom: 4 }}>
+                      {article.title}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 13, color: "#666", marginBottom: 8 }} numberOfLines={2}>
+                      {article.subtitle}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 11, color: "#999" }}>
+                      📅 {new Date(article.createdAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </ThemedText>
+                    <View style={{
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTopWidth: 1,
+                      borderTopColor: "#E0E0E0",
+                      alignItems: "center",
+                    }}>
+                      <ThemedText style={{ fontSize: 13, fontWeight: "600", color: "#2E7D32" }}>
+                        👆 Tocca per caricare nel form
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>

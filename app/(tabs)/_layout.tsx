@@ -51,6 +51,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="knowledge"
+        options={{
+          title: "AI Journalist",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="brain" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="autopilot"
         options={{
           title: "Autopilot",

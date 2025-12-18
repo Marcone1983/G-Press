@@ -28,6 +28,7 @@ const MAPPING = {
   "bolt.fill": "bolt",
   "calendar": "event",
   "gearshape.fill": "settings",
+  "brain": "psychology",
 } as IconMapping;
 
 /**

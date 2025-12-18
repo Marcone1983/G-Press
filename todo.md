@@ -222,3 +222,30 @@
 - [x] **4. SMART EMBARGO ZONES** - Rileva automaticamente fusi orari e festività dei paesi destinatari per evitare invii in momenti morti
 - [x] **5. PRESS RELEASE DNA** - Ogni comunicato ha un "DNA" unico che traccia diffusione: chi l'ha aperto per primo, chi l'ha inoltrato, catena di engagement
 
+
+
+## G-Press v6.0 - AI JOURNALIST BOT 🤖📰
+
+### KNOWLEDGE BASE PERSONALIZZATA:
+- [x] **UPLOAD DOCUMENTI** - Carica whitepaper, press release passate, innovazioni, dati aziendali (PDF, Word, TXT)
+- [x] **PARSING INTELLIGENTE** - Estrai informazioni chiave dai documenti caricati
+- [x] **CATEGORIZZAZIONE** - Organizza i documenti per argomento/prodotto/data
+- [ ] **RICERCA SEMANTICA** - Cerca nei documenti per trovare informazioni rilevanti
+
+### AI ARTICLE GENERATOR:
+- [x] **STILE GIORNALISTICO** - Genera articoli imparziali, NON promozionali (come un vero giornalista)
+- [x] **ANGOLI NOTIZIABILI** - Trova automaticamente gli angoli interessanti per i media
+- [x] **FORMATI MULTIPLI** - News breve, approfondimento, intervista, case study, annuncio
+- [ ] **FACT-CHECKING** - Verifica che i dati citati siano corretti rispetto alla knowledge base
+
+### WORKFLOW APPROVAZIONE:
+- [x] **PREVIEW ARTICOLO** - Mostra anteprima dell'articolo generato
+- [ ] **REVISIONE FACILE** - Modifica inline con suggerimenti AI
+- [x] **APPROVAZIONE** - Approva con un tap per procedere all'invio
+- [x] **STORICO BOZZE** - Salva tutte le bozze generate
+
+### SMART DISTRIBUTION:
+- [x] **AUTO-TARGETING** - Seleziona automaticamente i giornalisti più adatti per l'argomento
+- [ ] **AUTO-TIMING** - Invia al momento migliore basato su statistiche
+- [ ] **AUTO-FOLLOW-UP** - Sequenza automatica di follow-up se non aperto
+
