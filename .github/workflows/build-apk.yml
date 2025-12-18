@@ -18,20 +18,22 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 16 # Usa Node.js 16 per compatibilità
 
       - name: Install dependencies
         run: |
-          npm install -g pnpm
+          npm install -g expo-cli pnpm
           pnpm install
 
       - name: Build APK
+        env:
+          EXPO_USERNAME: ${{ secrets.EXPO_USERNAME }}
+          EXPO_PASSWORD: ${{ secrets.EXPO_PASSWORD }}
         run: |
-          npm install -g expo-cli
           expo build:android --non-interactive
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
-          path: dist/app-release.apk
+          path: dist/app-release.apk # Path del file APK
