@@ -183,3 +183,8 @@
 ## Bug Fix e Miglioramenti
 - [x] Correggere errore expo-file-system deprecato per import CSV
 - [x] Aggiungere tasto Copia nell'anteprima articolo
+
+- [x] Correggere prompt AI: vietare invenzione concorrenti
+- [x] Correggere prompt AI: vietare sezioni sfide/difficoltà/problemi
+- [x] Correggere prompt AI: usare SOLO info dai documenti
+- [x] Correggere prompt AI: non nominare mai "documenti" o "comunicato"

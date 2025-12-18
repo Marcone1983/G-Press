@@ -4,16 +4,42 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const SYSTEM_PROMPT = "Sei un giornalista professionista esperto in comunicazione aziendale. " +
-  "Il tuo compito è scrivere articoli IMPARZIALI e NON PROMOZIONALI basati sui documenti forniti. " +
-  "REGOLE FONDAMENTALI: " +
-  "1. Scrivi come un giornalista indipendente, NON come un ufficio stampa. " +
-  "2. Usa un tono neutro e oggettivo. " +
-  "3. Presenta i fatti senza esagerazioni o superlative. " +
-  "4. Includi contesto di settore quando rilevante. " +
-  "5. Evita frasi come 'leader di mercato', 'il migliore', 'rivoluzionario' a meno che non siano supportate da dati. " +
-  "6. Cita fonti e dati specifici quando disponibili. " +
-  "7. Scrivi in italiano professionale.";
+const SYSTEM_PROMPT = `Sei un giornalista professionista che scrive articoli per testate di primo livello.
+
+REGOLE OBBLIGATORIE - VIOLAZIONI NON TOLLERATE:
+
+1. USA SOLO LE INFORMAZIONI FORNITE
+   - NON inventare MAI concorrenti, competitor o aziende rivali
+   - NON inventare MAI dati, statistiche o numeri non presenti nelle info fornite
+   - NON inventare MAI partnership, collaborazioni o relazioni commerciali
+   - Se non hai un'informazione, NON la includere
+
+2. TONO E STILE
+   - Scrivi come un giornalista indipendente che riporta fatti
+   - Tono neutro e professionale, MAI promozionale
+   - MAI usare superlativi (migliore, leader, rivoluzionario) senza dati a supporto
+   - Scrivi in italiano professionale
+
+3. CONTENUTI VIETATI - NON SCRIVERE MAI:
+   - Sezioni "Sfide", "Difficoltà", "Problemi", "Ostacoli"
+   - Confronti con concorrenti (Meta, Epic Games, Roblox, etc.)
+   - Speculazioni su difficoltà future dell'azienda
+   - Frasi tipo "dovrà affrontare", "le sfide includono", "i rischi sono"
+   - Qualsiasi riferimento negativo o critico non presente nelle info fornite
+
+4. RIFERIMENTI ALLE FONTI
+   - NON dire MAI "secondo i documenti", "come riportato", "dal comunicato"
+   - NON nominare MAI la parola "documento" o "comunicato stampa"
+   - Presenta le informazioni come fatti verificati dal giornalista
+   - Scrivi come se avessi fatto tu la ricerca
+
+5. STRUTTURA
+   - Titolo accattivante e informativo
+   - Sottotitolo che espande il titolo
+   - Contenuto con fatti concreti
+   - Chiusura neutra senza speculazioni
+
+RICORDA: Se non hai informazioni su qualcosa, NON inventarla. Meglio un articolo più corto ma accurato.`;
 
 interface Document {
   name: string;
@@ -71,23 +97,23 @@ export default async function handler(req: Request) {
       });
     }
 
-    // Build context from documents
-    const documentsContext = documents
-      .map((doc) => "### " + doc.name + " (" + doc.category + ")\n" + doc.content)
+    // Build context from documents (without labeling them as "documents")
+    const infoContext = documents
+      .map((doc) => doc.content)
       .join('\n\n');
 
     const companyContext = 
       "AZIENDA: " + companyInfo.name + "\n" +
       "CEO: " + companyInfo.ceo + "\n" +
       "SETTORE: " + companyInfo.industry + "\n" +
-      "PRODOTTI: " + (companyInfo.products?.join(', ') || 'N/A') + "\n" +
-      "PUNTI DI FORZA: " + (companyInfo.strengths?.join(', ') || 'N/A');
+      "PRODOTTI/SERVIZI: " + (companyInfo.products?.join(', ') || 'N/A') + "\n" +
+      "CARATTERISTICHE: " + (companyInfo.strengths?.join(', ') || 'N/A');
 
     const formatInstructions: Record<string, string> = {
       news_brief: 'Scrivi una notizia breve (300-500 parole) in stile agenzia stampa.',
       deep_dive: 'Scrivi un approfondimento (800-1200 parole) con analisi dettagliata.',
       interview: 'Scrivi un articolo in formato intervista con 5-7 domande.',
-      case_study: 'Scrivi un caso studio: Sfida -> Soluzione -> Risultati.',
+      case_study: 'Scrivi un caso studio focalizzato sui risultati ottenuti.',
       announcement: 'Scrivi un annuncio ufficiale completo.',
     };
 
@@ -97,15 +123,17 @@ export default async function handler(req: Request) {
         ? 'Usa un tono tecnico.' 
         : 'Usa un tono professionale ma accessibile.';
 
-    const targetInstruction = targetAudience ? "TARGET: " + targetAudience : '';
+    const targetInstruction = targetAudience ? "TARGET LETTORI: " + targetAudience : '';
 
     const userPrompt = 
       (formatInstructions[format] || formatInstructions.news_brief) + "\n\n" +
       toneInstruction + "\n\n" +
       targetInstruction + "\n\n" +
       "INFORMAZIONI AZIENDA:\n" + companyContext + "\n\n" +
-      "DOCUMENTI DI RIFERIMENTO:\n" + documentsContext + "\n\n" +
-      "Genera un articolo giornalistico. Rispondi SOLO con JSON:\n" +
+      "INFORMAZIONI DISPONIBILI:\n" + infoContext + "\n\n" +
+      "Genera un articolo giornalistico basato ESCLUSIVAMENTE sulle informazioni sopra. " +
+      "NON inventare concorrenti, sfide o difficoltà. " +
+      "Rispondi SOLO con JSON:\n" +
       '{"title": "Titolo", "subtitle": "Sottotitolo", "content": "Contenuto completo", "tags": ["tag1", "tag2"], "suggestedCategories": ["cat1"], "estimatedReadTime": 3}';
 
     const response = await openai.chat.completions.create({
@@ -114,7 +142,7 @@ export default async function handler(req: Request) {
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
+      temperature: 0.5, // Ridotto per output più controllato
       max_tokens: 4000,
       response_format: { type: 'json_object' },
     });

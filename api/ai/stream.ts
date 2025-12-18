@@ -38,48 +38,68 @@ export default async function handler(request: Request): Promise<Response> {
 
     const openai = new OpenAI({ apiKey });
 
-    // Build context from documents
-    const documentContext = documents
-      .map((doc: any) => `[${doc.category}] ${doc.name}:\n${doc.content}`)
+    // Build context from documents (without labeling them as documents)
+    const infoContext = documents
+      .map((doc: any) => doc.content)
       .join('\n\n---\n\n');
 
     const formatInstructions: Record<string, string> = {
       news_brief: 'Scrivi una news breve (300-400 parole) in stile agenzia stampa.',
       deep_dive: 'Scrivi un approfondimento (800-1000 parole) con analisi dettagliata.',
       interview: 'Scrivi come se fosse un\'intervista al CEO con domande e risposte.',
-      case_study: 'Scrivi un case study con problema, soluzione e risultati.',
+      case_study: 'Scrivi un case study focalizzato sui risultati ottenuti.',
       announcement: 'Scrivi un comunicato stampa formale per un annuncio ufficiale.',
     };
 
     const systemPrompt = `Sei un giornalista professionista che scrive per testate di primo livello.
 
-REGOLE FONDAMENTALI:
-1. Scrivi in modo IMPARZIALE e OGGETTIVO - NON promozionale
-2. Usa il tono di un giornalista che riporta fatti, non di un marketer
-3. Includi contesto di mercato e prospettive bilanciate
-4. Cita dati specifici quando disponibili
-5. Evita superlativi e linguaggio commerciale
-6. Scrivi in italiano professionale
+REGOLE OBBLIGATORIE - VIOLAZIONI NON TOLLERATE:
+
+1. USA SOLO LE INFORMAZIONI FORNITE
+   - NON inventare MAI concorrenti, competitor o aziende rivali
+   - NON inventare MAI dati, statistiche o numeri non presenti nelle info fornite
+   - NON inventare MAI partnership o relazioni commerciali
+   - Se non hai un'informazione, NON la includere
+
+2. TONO E STILE
+   - Scrivi come un giornalista indipendente che riporta fatti
+   - Tono neutro e professionale, MAI promozionale
+   - MAI usare superlativi senza dati a supporto
+   - Scrivi in italiano professionale
+
+3. CONTENUTI VIETATI - NON SCRIVERE MAI:
+   - Sezioni "Sfide", "Difficoltà", "Problemi", "Ostacoli"
+   - Confronti con concorrenti (Meta, Epic Games, Roblox, Facebook, etc.)
+   - Speculazioni su difficoltà future dell'azienda
+   - Frasi tipo "dovrà affrontare", "le sfide includono", "i rischi sono"
+
+4. RIFERIMENTI ALLE FONTI
+   - NON dire MAI "secondo i documenti", "come riportato", "dal comunicato"
+   - NON nominare MAI la parola "documento" o "comunicato stampa"
+   - Presenta le informazioni come fatti verificati dal giornalista
 
 INFORMAZIONI AZIENDA:
 - Nome: ${companyInfo.name}
 - CEO: ${companyInfo.ceo || 'Non specificato'}
 - Settore: ${companyInfo.industry || 'Non specificato'}
 - Prodotti: ${companyInfo.products?.join(', ') || 'Non specificati'}
-- Punti di forza: ${companyInfo.strengths?.join(', ') || 'Non specificati'}
+- Caratteristiche: ${companyInfo.strengths?.join(', ') || 'Non specificate'}
 
 ${formatInstructions[format] || formatInstructions.news_brief}
 
-Inizia con un titolo accattivante, poi un sottotitolo, poi il contenuto dell'articolo.
 Formatta così:
 TITOLO: [titolo]
 SOTTOTITOLO: [sottotitolo]
 CONTENUTO:
-[articolo]`;
+[articolo]
 
-    const userPrompt = `Basandoti sui seguenti documenti, scrivi un articolo giornalistico:
+RICORDA: Se non hai informazioni su qualcosa, NON inventarla.`;
 
-${documentContext}`;
+    const userPrompt = `Scrivi un articolo giornalistico basato ESCLUSIVAMENTE su queste informazioni:
+
+${infoContext}
+
+NON inventare concorrenti, sfide o difficoltà. Usa SOLO le info sopra.`;
 
     // Create streaming response
     const stream = await openai.chat.completions.create({
@@ -88,7 +108,7 @@ ${documentContext}`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
+      temperature: 0.5, // Ridotto per output più controllato
       max_tokens: 2000,
       stream: true,
     });

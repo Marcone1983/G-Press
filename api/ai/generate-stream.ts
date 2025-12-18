@@ -38,33 +38,54 @@ export default async function handler(request: Request): Promise<Response> {
 
     const openai = new OpenAI({ apiKey });
 
-    // Build context from documents
-    let documentContext = '';
+    // Build context from documents (without labeling them)
+    let infoContext = '';
     if (documents && documents.length > 0) {
-      documentContext = documents
-        .map((doc: any) => `[${doc.name}]\n${doc.content}`)
+      infoContext = documents
+        .map((doc: any) => doc.content)
         .join('\n\n---\n\n');
     }
 
-    const systemPrompt = `Sei un giornalista professionista che scrive articoli imparziali e di alta qualità.
+    const systemPrompt = `Sei un giornalista professionista che scrive per testate di primo livello.
 
-REGOLE FONDAMENTALI:
-1. Scrivi in modo IMPARZIALE e OGGETTIVO - non sei un promotore dell'azienda
-2. Usa uno stile giornalistico professionale (piramide invertita)
-3. Cita fatti e dati quando disponibili
-4. Evita aggettivi promozionali (rivoluzionario, straordinario, incredibile)
-5. Includi contesto di mercato quando rilevante
-6. Scrivi in italiano
+REGOLE OBBLIGATORIE - VIOLAZIONI NON TOLLERATE:
+
+1. USA SOLO LE INFORMAZIONI FORNITE
+   - NON inventare MAI concorrenti, competitor o aziende rivali
+   - NON inventare MAI dati, statistiche o numeri non presenti nelle info fornite
+   - NON inventare MAI partnership, collaborazioni o relazioni commerciali
+   - Se non hai un'informazione, NON la includere
+
+2. TONO E STILE
+   - Scrivi come un giornalista indipendente che riporta fatti
+   - Tono neutro e professionale, MAI promozionale
+   - MAI usare superlativi senza dati a supporto
+   - Scrivi in italiano professionale
+
+3. CONTENUTI VIETATI - NON SCRIVERE MAI:
+   - Sezioni "Sfide", "Difficoltà", "Problemi", "Ostacoli"
+   - Confronti con concorrenti (Meta, Epic Games, Roblox, Facebook, etc.)
+   - Speculazioni su difficoltà future dell'azienda
+   - Frasi tipo "dovrà affrontare", "le sfide includono", "i rischi sono"
+   - Qualsiasi riferimento negativo o critico non presente nelle info fornite
+
+4. RIFERIMENTI ALLE FONTI
+   - NON dire MAI "secondo i documenti", "come riportato", "dal comunicato"
+   - NON nominare MAI la parola "documento" o "comunicato stampa"
+   - Presenta le informazioni come fatti verificati dal giornalista
 
 FORMATO RICHIESTO: ${format || 'articolo standard'}
 
-${customInstructions ? `ISTRUZIONI AGGIUNTIVE: ${customInstructions}` : ''}`;
+${customInstructions ? `ISTRUZIONI AGGIUNTIVE: ${customInstructions}` : ''}
 
-    const userPrompt = `Scrivi un articolo giornalistico basato su queste informazioni:
+RICORDA: Se non hai informazioni su qualcosa, NON inventarla.`;
+
+    const userPrompt = `Scrivi un articolo giornalistico basato ESCLUSIVAMENTE su queste informazioni:
 
 ${companyInfo ? `INFORMAZIONI AZIENDA:\n${companyInfo}\n\n` : ''}
-${documentContext ? `DOCUMENTI DI RIFERIMENTO:\n${documentContext}` : ''}
+${infoContext ? `INFORMAZIONI DISPONIBILI:\n${infoContext}` : ''}
 
+NON inventare concorrenti, sfide o difficoltà. Usa SOLO le info sopra.
 Genera un articolo completo con titolo, sottotitolo e corpo.`;
 
     // Use fine-tuned model if available
@@ -76,7 +97,7 @@ Genera un articolo completo con titolo, sottotitolo e corpo.`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
+      temperature: 0.5, // Ridotto per output più controllato
       max_tokens: 2000,
       stream: true,
     });
