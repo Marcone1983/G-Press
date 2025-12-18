@@ -1,2 +1,11 @@
-// Corrected code for compatibility with ES modules
-const env = await import('./scripts/load-env.js');
+export default async () => {
+  const env = await import('./scripts/load-env.js').then((module) => module.default || module);
+
+  return {
+    name: "G-Press",
+    version: "1.0.0",
+    extra: {
+      ...env,
+    },
+  };
+};
