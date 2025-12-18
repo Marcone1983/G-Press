@@ -170,3 +170,11 @@
 - [x] Revisione Inline con suggerimenti AI
 - [x] Generazione Streaming in tempo reale
 - [x] Fine-Tuning con raccolta esempi e gestione modelli
+
+
+## Scraping Email Pubbliche
+- [x] Creare endpoint API per scraping email da siti testate
+- [x] Cercare pagine "Redazione", "Chi siamo", "Contatti"
+- [x] Estrarre email pubbliche visibili
+- [x] Aggiornare UI Contatti con nuova funzione
+- [x] Sostituire import LinkedIn con scraping testate

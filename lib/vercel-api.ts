@@ -744,6 +744,52 @@ export async function listFineTunedModels(): Promise<{
 }
 
 // ============================================
+// SCRAPING EMAIL PUBBLICHE
+// ============================================
+
+export interface ScrapedContact {
+  email: string;
+  name?: string;
+  role?: string;
+  source: string;
+}
+
+/**
+ * Scrape email pubbliche da una testata giornalistica
+ */
+export async function scrapeOutletEmails(outlet: string): Promise<{
+  success: boolean;
+  outlet: string;
+  domain: string;
+  contacts: ScrapedContact[];
+  pagesScraped: string[];
+  summary: {
+    totalFound: number;
+    pagesChecked: number;
+  };
+}> {
+  try {
+    const response = await fetch(`${VERCEL_API_URL}/api/contacts/scrape-outlet`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ outlet }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('[Vercel API] Scrape outlet failed:', error);
+    throw error;
+  }
+}
+
+// ============================================
 // UTILITY
 // ============================================
 

@@ -22,7 +22,7 @@ import * as FileSystem from "expo-file-system";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { importLinkedInCSV, verifyEmails } from "@/lib/vercel-api";
+import { scrapeOutletEmails, verifyEmails } from "@/lib/vercel-api";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -109,8 +109,9 @@ export default function ContactsScreen() {
   const [newCategory, setNewCategory] = useState("general");
   const [importing, setImporting] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [showLinkedInModal, setShowLinkedInModal] = useState(false);
-  const [linkedInCSVContent, setLinkedInCSVContent] = useState("");
+  const [showScrapeModal, setShowScrapeModal] = useState(false);
+  const [outletToScrape, setOutletToScrape] = useState("");
+  const [scraping, setScraping] = useState(false);
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
@@ -304,53 +305,61 @@ export default function ContactsScreen() {
     }
   };
 
-  // Import LinkedIn CSV function
-  const handleLinkedInImport = async () => {
-    if (!linkedInCSVContent.trim()) {
-      Alert.alert("Errore", "Incolla il contenuto del file CSV di LinkedIn");
+  // Scrape email pubbliche da testata
+  const handleScrapeOutlet = async () => {
+    if (!outletToScrape.trim()) {
+      Alert.alert("Errore", "Inserisci il nome della testata");
       return;
     }
 
-    setImporting(true);
+    setScraping(true);
     try {
-      const response = await importLinkedInCSV({
-        csvContent: linkedInCSVContent,
-        filterJournalistsOnly: true,
-      });
+      const response = await scrapeOutletEmails(outletToScrape);
 
-      if (response.success && response.imported.length > 0) {
-        const newContacts: Journalist[] = response.imported.map((contact, i) => ({
-          id: Date.now() + i,
-          name: contact.name,
-          email: contact.email,
-          outlet: contact.outlet,
-          country: contact.country,
-          category: contact.category.toLowerCase(),
-          active: true,
-          isCustom: true,
-        }));
+      if (response.success && response.contacts.length > 0) {
+        // Filtra email già esistenti
+        const existingEmails = new Set([...customJournalists, ...journalists].map(j => j.email.toLowerCase()));
+        const newContacts: Journalist[] = response.contacts
+          .filter(c => !existingEmails.has(c.email.toLowerCase()))
+          .map((contact, i) => ({
+            id: Date.now() + i,
+            name: contact.name || contact.email.split("@")[0],
+            email: contact.email,
+            outlet: outletToScrape,
+            country: "Internazionale",
+            category: "general",
+            active: true,
+            isCustom: true,
+          }));
 
-        const updatedCustom = [...customJournalists, ...newContacts];
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
-        setCustomJournalists(updatedCustom);
+        if (newContacts.length > 0) {
+          const updatedCustom = [...customJournalists, ...newContacts];
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
+          setCustomJournalists(updatedCustom);
 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          "Importazione LinkedIn completata!",
-          `✅ ${response.imported.length} giornalisti importati\n⏭️ ${response.skipped.length} contatti saltati\n📂 Categorie: ${response.summary.categories.join(", ")}`
-        );
-        setShowLinkedInModal(false);
-        setLinkedInCSVContent("");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert(
+            "Scraping completato!",
+            `✅ ${newContacts.length} email trovate e importate\n📄 Pagine analizzate: ${response.pagesScraped.length}\n🌐 Dominio: ${response.domain}`
+          );
+          setShowScrapeModal(false);
+          setOutletToScrape("");
+        } else {
+          Alert.alert(
+            "Nessuna nuova email",
+            `Trovate ${response.contacts.length} email, ma sono già tutte presenti nel database.`
+          );
+        }
       } else {
         Alert.alert(
-          "Nessun giornalista trovato",
-          `${response.skipped.length} contatti non sono stati identificati come giornalisti.\nProva a disabilitare il filtro.`
+          "Nessuna email trovata",
+          `Non sono state trovate email pubbliche sul sito di ${outletToScrape}.\n\nProva con un'altra testata o verifica che il nome sia corretto.`
         );
       }
     } catch (error: any) {
-      Alert.alert("Errore", error.message || "Importazione fallita");
+      Alert.alert("Errore", error.message || "Scraping fallito");
     } finally {
-      setImporting(false);
+      setScraping(false);
     }
   };
 
@@ -514,10 +523,13 @@ export default function ContactsScreen() {
               </ThemedText>
             </Pressable>
             <Pressable
-              style={styles.addButton}
-              onPress={() => setShowLinkedInModal(true)}
+              style={[styles.addButton, scraping && { opacity: 0.6 }]}
+              onPress={() => setShowScrapeModal(true)}
+              disabled={scraping}
             >
-              <ThemedText style={styles.addButtonText}>🔗</ThemedText>
+              <ThemedText style={styles.addButtonText}>
+                {scraping ? "..." : "🔍"}
+              </ThemedText>
             </Pressable>
             <Pressable
               style={[styles.addButton, verifying && { opacity: 0.6 }]}
@@ -735,53 +747,64 @@ export default function ContactsScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* LinkedIn Import Modal */}
+      {/* Scrape Email Modal */}
       <Modal
-        visible={showLinkedInModal}
+        visible={showScrapeModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowLinkedInModal(false)}
+        onRequestClose={() => setShowScrapeModal(false)}
       >
         <KeyboardAvoidingView 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalContainer}
         >
           <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 20) }]}>
-            <Pressable onPress={() => setShowLinkedInModal(false)}>
+            <Pressable onPress={() => setShowScrapeModal(false)}>
               <ThemedText style={styles.modalCancel}>Annulla</ThemedText>
             </Pressable>
-            <ThemedText style={styles.modalTitle}>Import LinkedIn</ThemedText>
-            <Pressable onPress={handleLinkedInImport} disabled={importing}>
-              <ThemedText style={[styles.modalSave, importing && { opacity: 0.5 }]}>
-                {importing ? "..." : "Importa"}
+            <ThemedText style={styles.modalTitle}>Trova Email</ThemedText>
+            <Pressable onPress={handleScrapeOutlet} disabled={scraping}>
+              <ThemedText style={[styles.modalSave, scraping && { opacity: 0.5 }]}>
+                {scraping ? "..." : "Cerca"}
               </ThemedText>
             </Pressable>
           </View>
           
           <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
             <View style={styles.linkedInInfo}>
-              <ThemedText style={styles.linkedInTitle}>🔗 Come esportare da LinkedIn</ThemedText>
-              <ThemedText style={styles.linkedInStep}>1. Vai su LinkedIn {">"}  Impostazioni</ThemedText>
-              <ThemedText style={styles.linkedInStep}>2. Ottieni una copia dei tuoi dati</ThemedText>
-              <ThemedText style={styles.linkedInStep}>3. Seleziona "Connections" e scarica</ThemedText>
-              <ThemedText style={styles.linkedInStep}>4. Apri il CSV e copia il contenuto qui sotto</ThemedText>
+              <ThemedText style={styles.linkedInTitle}>🔍 Scraping Email Pubbliche</ThemedText>
+              <ThemedText style={styles.linkedInStep}>Inserisci il nome di una testata giornalistica</ThemedText>
+              <ThemedText style={styles.linkedInStep}>L'app cercherà le email pubbliche sul sito</ThemedText>
+              <ThemedText style={styles.linkedInStep}>Solo email visibili pubblicamente (legale)</ThemedText>
             </View>
             
             <View style={styles.formGroup}>
-              <ThemedText style={styles.formLabel}>Contenuto CSV *</ThemedText>
+              <ThemedText style={styles.formLabel}>Nome Testata *</ThemedText>
               <TextInput
-                style={[styles.formInput, styles.csvInput]}
-                placeholder="Incolla qui il contenuto del file CSV di LinkedIn..."
+                style={styles.formInput}
+                placeholder="Es: Il Sole 24 Ore, Repubblica, Corriere..."
                 placeholderTextColor="#999"
-                value={linkedInCSVContent}
-                onChangeText={setLinkedInCSVContent}
-                multiline
-                numberOfLines={10}
+                value={outletToScrape}
+                onChangeText={setOutletToScrape}
+                autoCapitalize="words"
               />
             </View>
             
+            <View style={styles.outletSuggestions}>
+              <ThemedText style={styles.suggestionsTitle}>Testate supportate:</ThemedText>
+              {["Corriere della Sera", "Repubblica", "Il Sole 24 Ore", "La Stampa", "ANSA", "Il Fatto Quotidiano", "Wired", "TechCrunch", "Bloomberg", "Reuters"].map(outlet => (
+                <Pressable
+                  key={outlet}
+                  style={styles.outletChip}
+                  onPress={() => setOutletToScrape(outlet)}
+                >
+                  <ThemedText style={styles.outletChipText}>{outlet}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+            
             <ThemedText style={styles.linkedInNote}>
-              ℹ️ Solo i contatti identificati come giornalisti verranno importati automaticamente.
+              ℹ️ Vengono estratte solo email pubblicamente visibili nelle pagine Redazione/Contatti.
             </ThemedText>
             
             <View style={{ height: 100 }} />
@@ -1149,5 +1172,33 @@ const styles = StyleSheet.create({
   csvInput: {
     minHeight: 200,
     textAlignVertical: "top",
+  },
+  
+  // Outlet Suggestions
+  outletSuggestions: {
+    marginTop: 16,
+    marginBottom: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 12,
+  },
+  outletChip: {
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    display: "flex",
+  },
+  outletChipText: {
+    fontSize: 13,
+    color: "#2E7D32",
+    fontWeight: "500",
   },
 });
