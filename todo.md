@@ -30,18 +30,18 @@
 - [ ] Boilerplate aziendale configurabile
 
 ## Infrastruttura MCP
-- [ ] Creare repository GitHub per G-Press
+- [x] Creare repository GitHub per G-Press
 - [ ] Configurare Cloudflare D1 database
 - [ ] Setup Cloudflare Workers per API backend
 - [ ] Configurare Vercel per deployment frontend
 
 ## Database Giornalisti Globale
-- [ ] Giornalisti Italia (testate nazionali e regionali)
-- [ ] Giornalisti USA (NYT, WSJ, WaPo, CNN, etc.)
-- [ ] Giornalisti UK (BBC, Guardian, Times, etc.)
-- [ ] Giornalisti Francia (Le Monde, Le Figaro, etc.)
-- [ ] Giornalisti Germania (Der Spiegel, FAZ, etc.)
-- [ ] Giornalisti Spagna (El País, El Mundo, etc.)
-- [ ] Agenzie stampa internazionali (Reuters, AP, AFP)
-- [ ] Testate tech globali (TechCrunch, The Verge, Wired)
-- [ ] Testate business globali (Bloomberg, Forbes, Fortune)
+- [x] Giornalisti Italia (testate nazionali e regionali)
+- [x] Giornalisti USA (NYT, WSJ, WaPo, CNN, etc.)
+- [x] Giornalisti UK (BBC, Guardian, Times, etc.)
+- [x] Giornalisti Francia (Le Monde, Le Figaro, etc.)
+- [x] Giornalisti Germania (Der Spiegel, FAZ, etc.)
+- [x] Giornalisti Spagna (El País, El Mundo, etc.)
+- [x] Agenzie stampa internazionali (Reuters, AP, AFP)
+- [x] Testate tech globali (TechCrunch, The Verge, Wired)
+- [x] Testate business globali (Bloomberg, Forbes, Fortune)
