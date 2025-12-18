@@ -26,6 +26,8 @@ jobs:
           pnpm install
 
       - name: Build APK
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           npx expo export --platform android
 
