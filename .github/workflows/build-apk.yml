@@ -25,13 +25,13 @@ jobs:
           npm install -g pnpm
           pnpm install
 
-      - name: Start Android build
+      - name: Build APK
         run: |
-          cd android
-          ./gradlew assembleRelease
+          npm install -g expo-cli
+          expo build:android --non-interactive
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: dist/app-release.apk
