@@ -22,7 +22,7 @@ interface SendResult {
  * Handles batching for large recipient lists
  */
 export async function sendEmails(options: EmailOptions): Promise<SendResult> {
-  const { to, subject, html, from = 'G-Press <onboarding@resend.dev>' } = options;
+  const { to, subject, html, from = 'Roberto Romagnino <g.ceo@growverse.net>' } = options;
   
   if (!RESEND_API_KEY) {
     return {
@@ -248,6 +248,9 @@ export function formatPressReleaseEmail(params: {
 
   html += `
   <div class="footer">
+    <strong>Roberto Romagnino</strong><br>
+    Founder & CEO<br>
+    GROWVERSE, LLC<br><br>
     Inviato con G-Press - Distribuzione Comunicati Stampa
   </div>
 </body>

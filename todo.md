@@ -97,3 +97,7 @@
 - [x] Visualizzare: email inviate, aperture, click, bounce
 - [x] Statistiche per singolo invio e totali
 - [x] Nuovo tab "Statistiche" con dashboard completa
+
+## Configurazione Email Mittente
+- [x] Configurare email mittente: Roberto Romagnino <g.ceo@growverse.net>
+- [x] Aggiungere firma: Founder & CEO, GROWVERSE, LLC
