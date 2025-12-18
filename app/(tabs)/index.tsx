@@ -1,278 +1,283 @@
-import { Image } from "expo-image";
-import { useRouter, Link } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet } from "react-native";
+import { useState } from "react";
+import {
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
 
-import { HelloWave } from "@/components/hello-wave";
-import ParallaxScrollView from "@/components/parallax-scroll-view";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { getLoginUrl } from "@/constants/oauth";
-import { useAuth } from "@/hooks/use-auth";
+import { useContacts, useArticles } from "@/hooks/use-storage";
+import { useThemeColor } from "@/hooks/use-theme-color";
 
 export default function HomeScreen() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const router = useRouter();
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [sending, setSending] = useState(false);
+  
+  const { contacts, loading: contactsLoading } = useContacts();
+  const { addArticle } = useArticles();
+  const insets = useSafeAreaInsets();
+  
+  const backgroundColor = useThemeColor({}, "background");
+  const surfaceColor = useThemeColor({}, "surface");
+  const borderColor = useThemeColor({}, "border");
+  const tintColor = useThemeColor({}, "tint");
+  const textColor = useThemeColor({}, "text");
+  const textSecondaryColor = useThemeColor({}, "textSecondary");
 
-  useEffect(() => {
-    console.log("[HomeScreen] Auth state:", {
-      hasUser: !!user,
-      loading,
-      isAuthenticated,
-      user: user ? { id: user.id, openId: user.openId, name: user.name, email: user.email } : null,
-    });
-  }, [user, loading, isAuthenticated]);
-
-  const handleLogin = async () => {
-    try {
-      console.log("[Auth] Login button clicked");
-      setIsLoggingIn(true);
-      const loginUrl = getLoginUrl();
-      console.log("[Auth] Generated login URL:", loginUrl);
-
-      // On web, use direct redirect in same tab
-      // On mobile, use WebBrowser to open OAuth in a separate context
-      if (Platform.OS === "web") {
-        console.log("[Auth] Web platform: redirecting to OAuth in same tab...");
-        window.location.href = loginUrl;
-        return;
-      }
-
-      // Mobile: Open OAuth URL in browser
-      // The OAuth server will redirect to our deep link (manusapp://oauth/callback?code=...&state=...)
-      console.log("[Auth] Opening OAuth URL in browser...");
-      const result = await WebBrowser.openAuthSessionAsync(
-        loginUrl,
-        undefined, // Deep link is already configured in getLoginUrl, so no need to specify here
-        {
-          preferEphemeralSession: false,
-          showInRecents: true,
-        },
+  const handleSend = async () => {
+    if (!title.trim()) {
+      Alert.alert("Errore", "Inserisci un titolo per l'articolo");
+      return;
+    }
+    if (!content.trim()) {
+      Alert.alert("Errore", "Inserisci il contenuto dell'articolo");
+      return;
+    }
+    if (contacts.length === 0) {
+      Alert.alert(
+        "Nessun contatto",
+        "Aggiungi almeno un contatto nella sezione Contatti prima di inviare"
       );
+      return;
+    }
 
-      console.log("[Auth] WebBrowser result:", result);
-      if (result.type === "cancel") {
-        console.log("[Auth] OAuth cancelled by user");
-      } else if (result.type === "dismiss") {
-        console.log("[Auth] OAuth dismissed");
-      } else if (result.type === "success" && result.url) {
-        console.log("[Auth] OAuth session successful, navigating to callback:", result.url);
-        // Extract code and state from the URL
-        try {
-          // Parse the URL - it might be exp:// or a regular URL
-          let url: URL;
-          if (result.url.startsWith("exp://") || result.url.startsWith("exps://")) {
-            // For exp:// URLs, we need to parse them differently
-            // Format: exp://192.168.31.156:8081/--/oauth/callback?code=...&state=...
-            const urlStr = result.url.replace(/^exp(s)?:\/\//, "http://");
-            url = new URL(urlStr);
-          } else {
-            url = new URL(result.url);
-          }
+    setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-          const code = url.searchParams.get("code");
-          const state = url.searchParams.get("state");
-          const error = url.searchParams.get("error");
+    try {
+      // Build email content
+      const subject = encodeURIComponent(title.trim());
+      const body = encodeURIComponent(content.trim());
+      const emails = contacts.map((c) => c.email).join(",");
+      
+      // Create mailto link
+      const mailtoUrl = `mailto:${emails}?subject=${subject}&body=${body}`;
+      
+      // Check if we can open mail
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+        
+        // Save to history
+        await addArticle({
+          title: title.trim(),
+          content: content.trim(),
+          recipientCount: contacts.length,
+        });
 
-          console.log("[Auth] Extracted params from callback URL:", {
-            code: code?.substring(0, 20) + "...",
-            state: state?.substring(0, 20) + "...",
-            error,
-          });
-
-          if (error) {
-            console.error("[Auth] OAuth error in callback:", error);
-            return;
-          }
-
-          if (code && state) {
-            // Navigate to callback route with params
-            console.log("[Auth] Navigating to callback route with params...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Missing code or state in callback URL");
-          }
-        } catch (err) {
-          console.error("[Auth] Failed to parse callback URL:", err, result.url);
-          // Fallback: try parsing with regex
-          const codeMatch = result.url.match(/[?&]code=([^&]+)/);
-          const stateMatch = result.url.match(/[?&]state=([^&]+)/);
-
-          if (codeMatch && stateMatch) {
-            const code = decodeURIComponent(codeMatch[1]);
-            const state = decodeURIComponent(stateMatch[1]);
-            console.log("[Auth] Fallback: extracted params via regex, navigating...");
-            router.push({
-              pathname: "/oauth/callback" as any,
-              params: { code, state },
-            });
-          } else {
-            console.error("[Auth] Could not extract code/state from URL");
-          }
-        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        Alert.alert(
+          "Articolo Pronto",
+          `L'app email si è aperta con ${contacts.length} destinatari. Premi Invia per completare.`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setTitle("");
+                setContent("");
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          "Errore",
+          "Impossibile aprire l'app email. Assicurati di avere un'app email configurata."
+        );
       }
     } catch (error) {
-      console.error("[Auth] Login error:", error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Errore", "Si è verificato un errore durante l'invio");
     } finally {
-      setIsLoggingIn(false);
+      setSending(false);
     }
   };
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-      headerImage={
-        <Image
-          source={require("@/assets/images/partial-react-logo.png")}
-          style={styles.reactLogo}
-        />
-      }
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={100}
     >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.authContainer}>
-        {loading ? (
-          <ActivityIndicator />
-        ) : isAuthenticated && user ? (
-          <ThemedView style={styles.userInfo}>
-            <ThemedText type="subtitle">Logged in as</ThemedText>
-            <ThemedText type="defaultSemiBold">{user.name || user.email || user.openId}</ThemedText>
-            <Pressable onPress={logout} style={styles.logoutButton}>
-              <ThemedText style={styles.logoutText}>Logout</ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : (
-          <Pressable
-            onPress={handleLogin}
-            disabled={isLoggingIn}
-            style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}
-          >
-            {isLoggingIn ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.loginText}>Login</ThemedText>
-            )}
-          </Pressable>
-        )}
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{" "}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: "cmd + d",
-              android: "cmd + m",
-              web: "F12",
-            })}
-          </ThemedText>{" "}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert("Action pressed")} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert("Share pressed")}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert("Delete pressed")}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) + 100 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Recipient Counter */}
+        <ThemedView style={[styles.counterCard, { backgroundColor: surfaceColor }]}>
+          <ThemedText style={[styles.counterLabel, { color: textSecondaryColor }]}>
+            Destinatari
+          </ThemedText>
+          <ThemedText style={[styles.counterValue, { color: tintColor }]}>
+            {contactsLoading ? "..." : contacts.length}
+          </ThemedText>
+          <ThemedText style={[styles.counterHint, { color: textSecondaryColor }]}>
+            {contacts.length === 0
+              ? "Aggiungi contatti per iniziare"
+              : contacts.length === 1
+              ? "contatto"
+              : "contatti"}
+          </ThemedText>
+        </ThemedView>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
+        {/* Title Input */}
+        <ThemedView style={styles.inputGroup}>
+          <ThemedText style={styles.label}>Titolo *</ThemedText>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: surfaceColor,
+                borderColor,
+                color: textColor,
+              },
+            ]}
+            placeholder="Titolo del comunicato stampa"
+            placeholderTextColor={textSecondaryColor}
+            value={title}
+            onChangeText={setTitle}
+            maxLength={200}
+          />
+        </ThemedView>
+
+        {/* Content Input */}
+        <ThemedView style={styles.inputGroup}>
+          <ThemedText style={styles.label}>Contenuto *</ThemedText>
+          <TextInput
+            style={[
+              styles.textArea,
+              {
+                backgroundColor: surfaceColor,
+                borderColor,
+                color: textColor,
+              },
+            ]}
+            placeholder="Scrivi qui il tuo articolo o comunicato stampa..."
+            placeholderTextColor={textSecondaryColor}
+            value={content}
+            onChangeText={setContent}
+            multiline
+            numberOfLines={10}
+            textAlignVertical="top"
+          />
+        </ThemedView>
+      </ScrollView>
+
+      {/* Send Button - Fixed at bottom */}
+      <ThemedView
+        style={[
+          styles.buttonContainer,
+          {
+            backgroundColor,
+            paddingBottom: Math.max(insets.bottom, 16),
+          },
+        ]}
+      >
+        <Pressable
+          style={[
+            styles.sendButton,
+            { backgroundColor: tintColor },
+            (sending || contacts.length === 0) && styles.sendButtonDisabled,
+          ]}
+          onPress={handleSend}
+          disabled={sending || contacts.length === 0}
+        >
+          {sending ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.sendButtonText}>
+              Invia a Tutti ({contacts.length})
+            </ThemedText>
+          )}
+        </Pressable>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{" "}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{" "}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  container: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  counterCard: {
+    alignItems: "center",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  counterLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  counterValue: {
+    fontSize: 48,
+    fontWeight: "bold",
+    lineHeight: 56,
+  },
+  counterHint: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-  },
-  authContainer: {
-    marginBottom: 16,
-    padding: 16,
+  input: {
+    borderWidth: 1,
     borderRadius: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    padding: 12,
+    fontSize: 16,
   },
-  userInfo: {
-    gap: 8,
-    alignItems: "center",
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 200,
   },
-  loginButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+  buttonContainer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
+  },
+  sendButton: {
+    paddingVertical: 16,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
   },
-  loginButtonDisabled: {
-    opacity: 0.6,
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
-  loginText: {
-    color: "#fff",
-    fontSize: 16,
+  sendButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "600",
-  },
-  logoutButton: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
-  },
-  logoutText: {
-    color: "#FF3B30",
-    fontSize: 14,
-    fontWeight: "500",
   },
 });
