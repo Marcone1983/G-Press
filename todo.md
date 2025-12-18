@@ -51,3 +51,15 @@
 - [x] Download dataset VOA journalists (verificato - nessuna email diretta)
 - [x] Estrazione nome testata/giornalista e email (6.802 testate USA)
 - [x] Caricamento nel database G-Press (7.022 contatti totali)
+
+## Miglioramenti UI/UX
+- [x] Migliorare grafica generale dell'app
+- [x] Rendere l'interfaccia più moderna e gradevole
+- [x] Mantenere tutte le funzionalità esistenti
+
+## Nuovi Contatti da File
+- [x] Analizzare pasted_content.txt (255 contatti)
+- [x] Analizzare pasted_content_2.txt (1527 contatti)
+- [x] Estrarre nome ed email valide (1527 unici)
+- [x] Eliminare doppioni (5 duplicati rimossi)
+- [x] Caricare nel database (1522 nuovi contatti - Totale: 8.544)

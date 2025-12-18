@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Picker } from "@react-native-picker/picker";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -89,7 +90,10 @@ export default function ContactsScreen() {
 
   const renderJournalist = ({ item }: { item: any }) => (
     <Pressable 
-      style={styles.journalistCard}
+      style={({ pressed }) => [
+        styles.journalistCard,
+        pressed && styles.journalistCardPressed,
+      ]}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         Alert.alert(
@@ -99,77 +103,126 @@ export default function ContactsScreen() {
         );
       }}
     >
-      <View style={styles.journalistHeader}>
-        <View style={styles.journalistInfo}>
-          <ThemedText style={styles.journalistName}>{item.name}</ThemedText>
-          <ThemedText style={styles.journalistOutlet}>{item.outlet || "Freelance"}</ThemedText>
+      <View style={styles.cardLeft}>
+        <View style={[styles.avatar, { backgroundColor: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
+          <ThemedText style={styles.avatarText}>
+            {item.name?.charAt(0)?.toUpperCase() || "?"}
+          </ThemedText>
         </View>
-        <View style={styles.badges}>
+      </View>
+      <View style={styles.cardContent}>
+        <View style={styles.cardHeader}>
+          <ThemedText style={styles.journalistName} numberOfLines={1}>
+            {item.name || item.outlet}
+          </ThemedText>
           <ThemedText style={styles.countryFlag}>
             {COUNTRY_FLAGS[item.country || ""] || "🌍"}
           </ThemedText>
-          <View style={[styles.categoryBadge, { backgroundColor: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
-            <ThemedText style={styles.categoryText}>
-              {item.category?.slice(0, 4).toUpperCase()}
+        </View>
+        <ThemedText style={styles.journalistOutlet} numberOfLines={1}>
+          {item.outlet || "Freelance"}
+        </ThemedText>
+        <View style={styles.cardFooter}>
+          <ThemedText style={styles.journalistEmail} numberOfLines={1}>
+            {item.email}
+          </ThemedText>
+          <View style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[item.category] || "#607D8B"}20` }]}>
+            <ThemedText style={[styles.categoryPillText, { color: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
+              {item.category}
             </ThemedText>
           </View>
         </View>
       </View>
-      <ThemedText style={styles.journalistEmail}>{item.email}</ThemedText>
     </Pressable>
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
+    <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>
+      {/* Header with Gradient */}
+      <LinearGradient
+        colors={["#2E7D32", "#43A047"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
+      >
         <ThemedText style={styles.title}>Database Giornalisti</ThemedText>
         <ThemedText style={styles.subtitle}>
-          {filteredJournalists.length} contatti in {groupedByCountry.length} paesi
+          {filteredJournalists.length.toLocaleString()} contatti • {groupedByCountry.length} paesi
         </ThemedText>
-      </View>
-
-      {/* Search & Filter */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={[styles.searchInput, { color: textColor }]}
-          placeholder="🔍 Cerca per nome, testata, email..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        <View style={styles.filterPicker}>
-          <Picker
-            selectedValue={categoryFilter}
-            onValueChange={setCategoryFilter}
-            style={[styles.picker, { color: textColor }]}
-          >
-            {CATEGORIES.map((cat) => (
-              <Picker.Item key={cat.value} label={cat.label} value={cat.value} />
-            ))}
-          </Picker>
+        
+        {/* Search Bar */}
+        <View style={styles.searchBar}>
+          <ThemedText style={styles.searchIcon}>🔍</ThemedText>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Cerca nome, testata, email..."
+            placeholderTextColor="rgba(255,255,255,0.6)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
+      </LinearGradient>
+
+      {/* Filter Pills */}
+      <View style={styles.filterContainer}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={CATEGORIES}
+          keyExtractor={(item) => item.value}
+          contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <Pressable
+              style={[
+                styles.filterPill,
+                categoryFilter === item.value && styles.filterPillActive,
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCategoryFilter(item.value);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.filterPillText,
+                  categoryFilter === item.value && styles.filterPillTextActive,
+                ]}
+              >
+                {item.label}
+              </ThemedText>
+            </Pressable>
+          )}
+        />
       </View>
 
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
-        {groupedByCountry.slice(0, 5).map(([country, list]) => (
-          <View key={country} style={styles.statBadge}>
-            <ThemedText style={styles.statFlag}>{COUNTRY_FLAGS[country] || "🌍"}</ThemedText>
-            <ThemedText style={styles.statCount}>{list.length}</ThemedText>
-          </View>
-        ))}
-        {groupedByCountry.length > 5 && (
-          <View style={styles.statBadge}>
-            <ThemedText style={styles.statCount}>+{groupedByCountry.length - 5}</ThemedText>
-          </View>
-        )}
+      {/* Country Stats */}
+      <View style={styles.statsContainer}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={groupedByCountry.slice(0, 8)}
+          keyExtractor={([country]) => country}
+          contentContainerStyle={styles.statsList}
+          renderItem={({ item: [country, list] }) => (
+            <View style={styles.statChip}>
+              <ThemedText style={styles.statFlag}>{COUNTRY_FLAGS[country] || "🌍"}</ThemedText>
+              <ThemedText style={styles.statCount}>{list.length.toLocaleString()}</ThemedText>
+            </View>
+          )}
+          ListFooterComponent={
+            groupedByCountry.length > 8 ? (
+              <View style={styles.statChipMore}>
+                <ThemedText style={styles.statCountMore}>+{groupedByCountry.length - 8}</ThemedText>
+              </View>
+            ) : null
+          }
+        />
       </View>
 
       {/* List */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1E88E5" />
+          <ActivityIndicator size="large" color="#43A047" />
           <ThemedText style={styles.loadingText}>Caricamento contatti...</ThemedText>
         </View>
       ) : (
@@ -179,13 +232,17 @@ export default function ContactsScreen() {
           renderItem={renderJournalist}
           contentContainerStyle={[
             styles.listContent,
-            { paddingBottom: Math.max(insets.bottom, 20) + 60 }
+            { paddingBottom: Math.max(insets.bottom, 20) + 80 }
           ]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
+              <ThemedText style={styles.emptyIcon}>📭</ThemedText>
               <ThemedText style={styles.emptyText}>
                 Nessun giornalista trovato
+              </ThemedText>
+              <ThemedText style={styles.emptySubtext}>
+                Prova a modificare i filtri di ricerca
               </ThemedText>
             </View>
           }
@@ -199,127 +256,200 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  
+  // Header
   header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
-    color: "#4CAF50",
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
-    color: "#666",
-    marginTop: 2,
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 4,
   },
-  searchContainer: {
+  searchBar: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 8,
-    marginBottom: 8,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 12,
+    marginTop: 16,
+    paddingHorizontal: 14,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    padding: 10,
+    paddingVertical: 12,
     fontSize: 15,
-    backgroundColor: "#FFF",
+    color: "#FFFFFF",
   },
-  filterPicker: {
-    width: 100,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    backgroundColor: "#FFF",
-    overflow: "hidden",
+  
+  // Filters
+  filterContainer: {
+    marginTop: 16,
   },
-  picker: {
-    height: 42,
+  filterList: {
+    paddingHorizontal: 16,
+    gap: 8,
   },
-  statsRow: {
-    flexDirection: "row",
+  filterPill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 8,
-    flexWrap: "wrap",
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginRight: 8,
   },
-  statBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
+  filterPillActive: {
+    backgroundColor: "#2E7D32",
+    borderColor: "#2E7D32",
   },
-  statFlag: {
-    fontSize: 16,
-  },
-  statCount: {
+  filterPillText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#333",
+    color: "#666",
   },
-  listContent: {
-    padding: 16,
+  filterPillTextActive: {
+    color: "#FFFFFF",
   },
-  journalistCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
+  
+  // Stats
+  statsContainer: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  statsList: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  statChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  journalistHeader: {
+  statChipMore: {
+    backgroundColor: "#E8E8E8",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  statFlag: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  statCount: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333",
+  },
+  statCountMore: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  
+  // List
+  listContent: {
+    padding: 16,
+  },
+  journalistCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  journalistCardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
+  cardLeft: {
+    marginRight: 14,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  cardContent: {
+    flex: 1,
+  },
+  cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 6,
-  },
-  journalistInfo: {
-    flex: 1,
+    alignItems: "center",
   },
   journalistName: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
+    fontWeight: "700",
+    color: "#1A1A1A",
+    flex: 1,
+    marginRight: 8,
+  },
+  countryFlag: {
+    fontSize: 18,
   },
   journalistOutlet: {
     fontSize: 13,
     color: "#666",
     marginTop: 2,
   },
-  journalistEmail: {
-    fontSize: 13,
-    color: "#4CAF50",
-  },
-  badges: {
+  cardFooter: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 6,
+    marginTop: 8,
   },
-  countryFlag: {
-    fontSize: 18,
+  journalistEmail: {
+    fontSize: 12,
+    color: "#43A047",
+    flex: 1,
+    marginRight: 8,
   },
-  categoryBadge: {
+  categoryPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 6,
   },
-  categoryText: {
+  categoryPillText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#FFF",
+    textTransform: "capitalize",
   },
+  
+  // Loading & Empty
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -328,13 +458,24 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: "#666",
+    fontSize: 15,
   },
   emptyContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: "center",
   },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
   emptyText: {
+    color: "#333",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  emptySubtext: {
     color: "#999",
-    fontSize: 16,
+    fontSize: 14,
+    marginTop: 4,
   },
 });
