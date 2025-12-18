@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
   TextInput,
@@ -9,17 +9,34 @@ import {
   ScrollView,
   ActivityIndicator,
   View,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/hooks/use-theme-color";
+
+// Import static JSON data
+import journalistsData from "@/assets/data/journalists.json";
+
+const STORAGE_KEY = "gpress_custom_journalists";
+const HISTORY_KEY = "gpress_sent_history";
+
+interface Journalist {
+  id: number;
+  name: string;
+  email: string;
+  outlet: string;
+  country: string;
+  category: string;
+  active: boolean;
+}
 
 const CATEGORIES = [
   { label: "Tutte le categorie", value: "all" },
@@ -61,28 +78,74 @@ export default function HomeScreen() {
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [sending, setSending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [journalists, setJournalists] = useState<Journalist[]>([]);
+  const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
   
   const insets = useSafeAreaInsets();
-  
-  // Get journalist count
-  const { data: journalistCount, isLoading: countLoading } = trpc.journalists.count.useQuery();
-  
-  // Get journalists filtered by category and country
-  const { data: journalists } = trpc.journalists.list.useQuery({
-    category: category !== "all" ? category : undefined,
-    country: country !== "all" ? country : undefined,
-    isActive: true,
-  });
-  
-  const filteredCount = journalists?.length ?? 0;
-  
-  // Create press release mutation
-  const createPressRelease = trpc.pressReleases.create.useMutation();
-  const sendPressRelease = trpc.pressReleases.send.useMutation();
-  
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
+
+  // Load journalists on mount
+  useEffect(() => {
+    loadJournalists();
+  }, []);
+
+  const loadJournalists = async () => {
+    setIsLoading(true);
+    try {
+      // Load static data
+      const staticData = journalistsData as Journalist[];
+      
+      // Load custom journalists from AsyncStorage
+      const customData = await AsyncStorage.getItem(STORAGE_KEY);
+      const custom = customData ? JSON.parse(customData) : [];
+      
+      setJournalists(staticData);
+      setCustomJournalists(custom);
+    } catch (error) {
+      console.error("Error loading journalists:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Combine and filter journalists
+  const allJournalists = useMemo(() => {
+    return [...customJournalists, ...journalists];
+  }, [journalists, customJournalists]);
+
+  const filteredJournalists = useMemo(() => {
+    let filtered = allJournalists;
+    
+    if (category !== "all") {
+      filtered = filtered.filter(j => j.category === category);
+    }
+    
+    if (country !== "all") {
+      filtered = filtered.filter(j => j.country === country);
+    }
+    
+    return filtered;
+  }, [allJournalists, category, country]);
+
+  const totalCount = allJournalists.length;
+  const filteredCount = filteredJournalists.length;
+
+  const saveToHistory = async (pressRelease: any) => {
+    try {
+      const historyData = await AsyncStorage.getItem(HISTORY_KEY);
+      const history = historyData ? JSON.parse(historyData) : [];
+      history.unshift(pressRelease);
+      // Keep only last 50 items
+      if (history.length > 50) history.pop();
+      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (error) {
+      console.error("Error saving to history:", error);
+    }
+  };
 
   const handleSend = async () => {
     if (!title.trim()) {
@@ -113,38 +176,90 @@ export default function HomeScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
             try {
-              const pressReleaseId = await createPressRelease.mutateAsync({
+              // Get all emails
+              const emails = filteredJournalists.map(j => j.email);
+              
+              // Build email body
+              let body = content.trim();
+              if (subtitle.trim()) {
+                body = `${subtitle.trim()}\n\n${body}`;
+              }
+              if (boilerplate.trim()) {
+                body += `\n\n---\n${boilerplate.trim()}`;
+              }
+              if (contactName.trim() || contactEmail.trim()) {
+                body += `\n\nContatti:\n${contactName.trim()}${contactEmail.trim() ? ` - ${contactEmail.trim()}` : ""}`;
+              }
+              
+              // For large lists, we'll use BCC approach
+              // Most email clients support up to ~100 recipients in BCC
+              const batchSize = 50;
+              const batches = [];
+              for (let i = 0; i < emails.length; i += batchSize) {
+                batches.push(emails.slice(i, i + batchSize));
+              }
+              
+              // Save to history first
+              await saveToHistory({
+                id: Date.now(),
                 title: title.trim(),
-                subtitle: subtitle.trim() || undefined,
+                subtitle: subtitle.trim(),
                 content: content.trim(),
-                category: category !== "all" ? category as any : undefined,
-                boilerplate: boilerplate.trim() || undefined,
-                contactName: contactName.trim() || undefined,
-                contactEmail: contactEmail.trim() || undefined,
+                boilerplate: boilerplate.trim(),
+                contactName: contactName.trim(),
+                contactEmail: contactEmail.trim(),
+                sentAt: new Date().toISOString(),
+                recipientCount: filteredCount,
+                category: category,
+                country: country,
               });
-
-              const result = await sendPressRelease.mutateAsync({
-                pressReleaseId,
-                categoryFilter: category !== "all" ? category : undefined,
-              });
-
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-              Alert.alert(
-                "Invio Completato",
-                `Comunicato inviato con successo!\n\n✅ Inviati: ${result.totalSent}\n❌ Falliti: ${result.totalFailed}`,
-                [
-                  {
-                    text: "OK",
-                    onPress: () => {
-                      setTitle("");
-                      setSubtitle("");
-                      setContent("");
-                      setBoilerplate("");
-                    },
-                  },
-                ]
-              );
+              
+              // Open email client with first batch
+              const firstBatch = batches[0];
+              const mailtoUrl = `mailto:?bcc=${firstBatch.join(",")}&subject=${encodeURIComponent(title.trim())}&body=${encodeURIComponent(body)}`;
+              
+              const canOpen = await Linking.canOpenURL(mailtoUrl);
+              if (canOpen) {
+                await Linking.openURL(mailtoUrl);
+                
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                
+                if (batches.length > 1) {
+                  Alert.alert(
+                    "Email Preparata",
+                    `L'app email si è aperta con ${firstBatch.length} destinatari.\n\nHai ${batches.length} gruppi da inviare (${filteredCount} totali).\n\nDopo aver inviato, torna qui per i prossimi gruppi.`,
+                    [
+                      {
+                        text: "OK",
+                        onPress: () => {
+                          setTitle("");
+                          setSubtitle("");
+                          setContent("");
+                          setBoilerplate("");
+                        },
+                      },
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    "Email Preparata",
+                    `L'app email si è aperta con ${filteredCount} destinatari in BCC.\n\nInvia l'email per completare la distribuzione.`,
+                    [
+                      {
+                        text: "OK",
+                        onPress: () => {
+                          setTitle("");
+                          setSubtitle("");
+                          setContent("");
+                          setBoilerplate("");
+                        },
+                      },
+                    ]
+                  );
+                }
+              } else {
+                Alert.alert("Errore", "Impossibile aprire l'app email. Verifica di avere un'app email configurata.");
+              }
             } catch (error: any) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
               Alert.alert("Errore", error.message || "Si è verificato un errore durante l'invio");
@@ -200,7 +315,7 @@ export default function HomeScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <ThemedText style={styles.statNumber}>
-                {countLoading ? "..." : journalistCount?.toLocaleString() ?? 0}
+                {isLoading ? "..." : totalCount.toLocaleString()}
               </ThemedText>
               <ThemedText style={styles.statText}>Giornalisti</ThemedText>
             </View>

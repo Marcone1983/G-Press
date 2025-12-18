@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   StyleSheet,
   FlatList,
@@ -7,16 +7,35 @@ import {
   View,
   Alert,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/hooks/use-theme-color";
+
+// Import static JSON data
+import journalistsData from "@/assets/data/journalists.json";
+
+const STORAGE_KEY = "gpress_custom_journalists";
+
+interface Journalist {
+  id: number;
+  name: string;
+  email: string;
+  outlet: string;
+  country: string;
+  category: string;
+  active: boolean;
+  isCustom?: boolean;
+}
 
 const CATEGORIES = [
   { label: "Tutte", value: "all" },
@@ -29,12 +48,33 @@ const CATEGORIES = [
   { label: "Generale", value: "general" },
 ];
 
+const CATEGORY_OPTIONS = [
+  { label: "Tecnologia", value: "technology" },
+  { label: "Business", value: "business" },
+  { label: "Finanza", value: "finance" },
+  { label: "Salute", value: "health" },
+  { label: "Sport", value: "sports" },
+  { label: "Politica", value: "politics" },
+  { label: "Generale", value: "general" },
+];
+
 const COUNTRY_FLAGS: Record<string, string> = {
-  IT: "🇮🇹", US: "🇺🇸", GB: "🇬🇧", FR: "🇫🇷", DE: "🇩🇪", ES: "🇪🇸",
-  CA: "🇨🇦", AU: "🇦🇺", JP: "🇯🇵", IN: "🇮🇳", BR: "🇧🇷", MX: "🇲🇽",
-  AR: "🇦🇷", CN: "🇨🇳", RU: "🇷🇺", HK: "🇭🇰", SG: "🇸🇬", KR: "🇰🇷",
-  IL: "🇮🇱", ZA: "🇿🇦", NZ: "🇳🇿", QA: "🇶🇦", SA: "🇸🇦", AE: "🇦🇪",
-  CL: "🇨🇱", PE: "🇵🇪", BE: "🇧🇪",
+  "Italia": "🇮🇹", "IT": "🇮🇹",
+  "Stati Uniti": "🇺🇸", "US": "🇺🇸", "USA": "🇺🇸",
+  "Regno Unito": "🇬🇧", "UK": "🇬🇧", "GB": "🇬🇧",
+  "Francia": "🇫🇷", "FR": "🇫🇷",
+  "Germania": "🇩🇪", "DE": "🇩🇪",
+  "Spagna": "🇪🇸", "ES": "🇪🇸",
+  "Canada": "🇨🇦", "CA": "🇨🇦",
+  "Australia": "🇦🇺", "AU": "🇦🇺",
+  "Giappone": "🇯🇵", "JP": "🇯🇵",
+  "India": "🇮🇳", "IN": "🇮🇳",
+  "Brasile": "🇧🇷", "BR": "🇧🇷",
+  "Messico": "🇲🇽", "MX": "🇲🇽",
+  "Argentina": "🇦🇷", "AR": "🇦🇷",
+  "Cina": "🇨🇳", "CN": "🇨🇳",
+  "Russia": "🇷🇺", "RU": "🇷🇺",
+  "Internazionale": "🌍",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -52,59 +92,174 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [journalists, setJournalists] = useState<Journalist[]>([]);
+  const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  
+  // Form state for adding new journalist
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newOutlet, setNewOutlet] = useState("");
+  const [newCountry, setNewCountry] = useState("");
+  const [newCategory, setNewCategory] = useState("general");
   
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
-  
-  // Fetch journalists
-  const { data: journalists, isLoading } = trpc.journalists.list.useQuery({
-    category: categoryFilter !== "all" ? categoryFilter : undefined,
-    isActive: true,
-  });
 
-  // Filter by search
-  const filteredJournalists = useMemo(() => {
-    if (!journalists) return [];
-    if (!searchQuery.trim()) return journalists;
+  // Load journalists on mount
+  useEffect(() => {
+    loadJournalists();
+  }, []);
+
+  const loadJournalists = async () => {
+    setIsLoading(true);
+    try {
+      // Load static data
+      const staticData = journalistsData as Journalist[];
+      
+      // Load custom journalists from AsyncStorage
+      const customData = await AsyncStorage.getItem(STORAGE_KEY);
+      const custom = customData ? JSON.parse(customData) : [];
+      
+      setJournalists(staticData);
+      setCustomJournalists(custom);
+    } catch (error) {
+      console.error("Error loading journalists:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveCustomJournalist = async () => {
+    if (!newName.trim() || !newEmail.trim()) {
+      Alert.alert("Errore", "Nome ed email sono obbligatori");
+      return;
+    }
     
-    const query = searchQuery.toLowerCase();
-    return journalists.filter(j => 
-      j.name.toLowerCase().includes(query) ||
-      j.outlet?.toLowerCase().includes(query) ||
-      j.email.toLowerCase().includes(query) ||
-      j.country?.toLowerCase().includes(query)
-    );
-  }, [journalists, searchQuery]);
+    if (!newEmail.includes("@")) {
+      Alert.alert("Errore", "Inserisci un'email valida");
+      return;
+    }
+    
+    const newJournalist: Journalist = {
+      id: Date.now(),
+      name: newName.trim(),
+      email: newEmail.trim().toLowerCase(),
+      outlet: newOutlet.trim() || "Freelance",
+      country: newCountry.trim() || "Internazionale",
+      category: newCategory,
+      active: true,
+      isCustom: true,
+    };
+    
+    const updatedCustom = [...customJournalists, newJournalist];
+    
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
+      setCustomJournalists(updatedCustom);
+      
+      // Reset form
+      setNewName("");
+      setNewEmail("");
+      setNewOutlet("");
+      setNewCountry("");
+      setNewCategory("general");
+      setShowAddModal(false);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Successo", `${newJournalist.name} aggiunto al database!`);
+    } catch (error) {
+      Alert.alert("Errore", "Impossibile salvare il contatto");
+    }
+  };
 
-  // Group by country
+  const deleteCustomJournalist = async (id: number) => {
+    Alert.alert(
+      "Elimina Contatto",
+      "Sei sicuro di voler eliminare questo contatto?",
+      [
+        { text: "Annulla", style: "cancel" },
+        {
+          text: "Elimina",
+          style: "destructive",
+          onPress: async () => {
+            const updated = customJournalists.filter(j => j.id !== id);
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            setCustomJournalists(updated);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      ]
+    );
+  };
+
+  // Combine static and custom journalists
+  const allJournalists = useMemo(() => {
+    return [...customJournalists, ...journalists];
+  }, [journalists, customJournalists]);
+
+  // Filter by category and search
+  const filteredJournalists = useMemo(() => {
+    let filtered = allJournalists;
+    
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter(j => j.category === categoryFilter);
+    }
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(j => 
+        j.name?.toLowerCase().includes(query) ||
+        j.outlet?.toLowerCase().includes(query) ||
+        j.email?.toLowerCase().includes(query) ||
+        j.country?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [allJournalists, categoryFilter, searchQuery]);
+
+  // Group by country for stats
   const groupedByCountry = useMemo(() => {
     const groups: Record<string, typeof filteredJournalists> = {};
     filteredJournalists.forEach(j => {
-      const country = j.country || "XX";
+      const country = j.country || "Internazionale";
       if (!groups[country]) groups[country] = [];
       groups[country].push(j);
     });
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredJournalists]);
 
-  const renderJournalist = ({ item }: { item: any }) => (
+  const renderJournalist = ({ item }: { item: Journalist }) => (
     <Pressable 
       style={({ pressed }) => [
         styles.journalistCard,
         pressed && styles.journalistCardPressed,
+        item.isCustom && styles.customCard,
       ]}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const actions = item.isCustom 
+          ? [
+              { text: "Elimina", style: "destructive" as const, onPress: () => deleteCustomJournalist(item.id) },
+              { text: "OK" }
+            ]
+          : [{ text: "OK" }];
+        
         Alert.alert(
           item.name,
-          `📧 ${item.email}\n📰 ${item.outlet || "N/A"}\n🌍 ${COUNTRY_FLAGS[item.country || ""] || ""} ${item.country || "N/A"}\n🏷️ ${item.category}`,
-          [{ text: "OK" }]
+          `📧 ${item.email}\n📰 ${item.outlet || "N/A"}\n🌍 ${COUNTRY_FLAGS[item.country] || "🌍"} ${item.country || "N/A"}\n🏷️ ${item.category}${item.isCustom ? "\n⭐ Aggiunto manualmente" : ""}`,
+          actions
         );
       }}
     >
       <View style={styles.cardLeft}>
-        <View style={[styles.avatar, { backgroundColor: CATEGORY_COLORS[item.category] || "#607D8B" }]}>
+        <View style={[
+          styles.avatar, 
+          { backgroundColor: item.isCustom ? "#FF9800" : (CATEGORY_COLORS[item.category] || "#607D8B") }
+        ]}>
           <ThemedText style={styles.avatarText}>
             {item.name?.charAt(0)?.toUpperCase() || "?"}
           </ThemedText>
@@ -113,10 +268,10 @@ export default function ContactsScreen() {
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <ThemedText style={styles.journalistName} numberOfLines={1}>
-            {item.name || item.outlet}
+            {item.isCustom ? "⭐ " : ""}{item.name || item.outlet}
           </ThemedText>
           <ThemedText style={styles.countryFlag}>
-            {COUNTRY_FLAGS[item.country || ""] || "🌍"}
+            {COUNTRY_FLAGS[item.country] || "🌍"}
           </ThemedText>
         </View>
         <ThemedText style={styles.journalistOutlet} numberOfLines={1}>
@@ -145,10 +300,23 @@ export default function ContactsScreen() {
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
       >
-        <ThemedText style={styles.title}>Database Giornalisti</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          {filteredJournalists.length.toLocaleString()} contatti • {groupedByCountry.length} paesi
-        </ThemedText>
+        <View style={styles.headerTop}>
+          <View>
+            <ThemedText style={styles.title}>Database Giornalisti</ThemedText>
+            <ThemedText style={styles.subtitle}>
+              {filteredJournalists.length.toLocaleString()} contatti • {customJournalists.length} personalizzati
+            </ThemedText>
+          </View>
+          <Pressable
+            style={styles.addButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setShowAddModal(true);
+            }}
+          >
+            <ThemedText style={styles.addButtonText}>+ Aggiungi</ThemedText>
+          </Pressable>
+        </View>
         
         {/* Search Bar */}
         <View style={styles.searchBar}>
@@ -242,12 +410,108 @@ export default function ContactsScreen() {
                 Nessun giornalista trovato
               </ThemedText>
               <ThemedText style={styles.emptySubtext}>
-                Prova a modificare i filtri di ricerca
+                Prova a modificare i filtri o aggiungi un nuovo contatto
               </ThemedText>
             </View>
           }
         />
       )}
+
+      {/* Add Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalContainer}
+        >
+          <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 20) }]}>
+            <Pressable onPress={() => setShowAddModal(false)}>
+              <ThemedText style={styles.modalCancel}>Annulla</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>Nuovo Contatto</ThemedText>
+            <Pressable onPress={saveCustomJournalist}>
+              <ThemedText style={styles.modalSave}>Salva</ThemedText>
+            </Pressable>
+          </View>
+          
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Nome *</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: Mario Rossi"
+                placeholderTextColor="#999"
+                value={newName}
+                onChangeText={setNewName}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Email *</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: mario.rossi@giornale.it"
+                placeholderTextColor="#999"
+                value={newEmail}
+                onChangeText={setNewEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Testata</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: Il Sole 24 Ore"
+                placeholderTextColor="#999"
+                value={newOutlet}
+                onChangeText={setNewOutlet}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Paese</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: Italia"
+                placeholderTextColor="#999"
+                value={newCountry}
+                onChangeText={setNewCountry}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Categoria</ThemedText>
+              <View style={styles.categoryGrid}>
+                {CATEGORY_OPTIONS.map(cat => (
+                  <Pressable
+                    key={cat.value}
+                    style={[
+                      styles.categoryOption,
+                      newCategory === cat.value && styles.categoryOptionActive,
+                    ]}
+                    onPress={() => setNewCategory(cat.value)}
+                  >
+                    <ThemedText style={[
+                      styles.categoryOptionText,
+                      newCategory === cat.value && styles.categoryOptionTextActive,
+                    ]}>
+                      {cat.label}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -264,6 +528,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   title: {
     fontSize: 28,
     fontWeight: "800",
@@ -274,6 +543,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "rgba(255,255,255,0.85)",
     marginTop: 4,
+  },
+  addButton: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
   },
   searchBar: {
     flexDirection: "row",
@@ -388,6 +668,10 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     transform: [{ scale: 0.99 }],
   },
+  customCard: {
+    borderWidth: 2,
+    borderColor: "#FF9800",
+  },
   cardLeft: {
     marginRight: 14,
   },
@@ -477,5 +761,83 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 14,
     marginTop: 4,
+    textAlign: "center",
+  },
+  
+  // Modal
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  modalCancel: {
+    color: "#666",
+    fontSize: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  modalSave: {
+    color: "#43A047",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  formInput: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: "#1A1A1A",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  categoryOptionActive: {
+    backgroundColor: "#43A047",
+    borderColor: "#43A047",
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  categoryOptionTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });

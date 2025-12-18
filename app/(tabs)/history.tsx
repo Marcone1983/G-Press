@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   StyleSheet,
   FlatList,
@@ -11,49 +11,80 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { useAuth } from "@/hooks/use-auth";
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
-  draft: { color: "#757575", bg: "#F5F5F5", icon: "📝" },
-  scheduled: { color: "#F57C00", bg: "#FFF3E0", icon: "⏰" },
-  sending: { color: "#1976D2", bg: "#E3F2FD", icon: "📤" },
-  sent: { color: "#388E3C", bg: "#E8F5E9", icon: "✅" },
-  failed: { color: "#D32F2F", bg: "#FFEBEE", icon: "❌" },
-};
+const HISTORY_KEY = "gpress_sent_history";
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Bozza",
-  scheduled: "Programmato",
-  sending: "In invio...",
-  sent: "Inviato",
-  failed: "Fallito",
-};
+interface PressRelease {
+  id: number;
+  title: string;
+  subtitle?: string;
+  content: string;
+  boilerplate?: string;
+  contactName?: string;
+  contactEmail?: string;
+  sentAt: string;
+  recipientCount: number;
+  category?: string;
+  country?: string;
+}
 
 export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pressReleases, setPressReleases] = useState<PressRelease[]>([]);
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
-  
-  const { isAuthenticated } = useAuth();
-  
-  // Fetch press releases
-  const { data: pressReleases, isLoading, refetch } = trpc.pressReleases.list.useQuery(
-    undefined,
-    { enabled: isAuthenticated }
-  );
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    setIsLoading(true);
+    try {
+      const historyData = await AsyncStorage.getItem(HISTORY_KEY);
+      const history = historyData ? JSON.parse(historyData) : [];
+      setPressReleases(history);
+    } catch (error) {
+      console.error("Error loading history:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refetch();
+    await loadHistory();
     setRefreshing(false);
   };
 
-  const formatDate = (date: Date | string | null) => {
+  const deleteItem = async (id: number) => {
+    Alert.alert(
+      "Elimina Comunicato",
+      "Sei sicuro di voler eliminare questo comunicato dallo storico?",
+      [
+        { text: "Annulla", style: "cancel" },
+        {
+          text: "Elimina",
+          style: "destructive",
+          onPress: async () => {
+            const updated = pressReleases.filter(p => p.id !== id);
+            await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+            setPressReleases(updated);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      ]
+    );
+  };
+
+  const formatDate = (date: string | null) => {
     if (!date) return "N/A";
     const d = new Date(date);
     return d.toLocaleDateString("it-IT", {
@@ -65,7 +96,7 @@ export default function HistoryScreen() {
     });
   };
 
-  const getRelativeTime = (date: Date | string | null) => {
+  const getRelativeTime = (date: string | null) => {
     if (!date) return "";
     const d = new Date(date);
     const now = new Date();
@@ -79,9 +110,7 @@ export default function HistoryScreen() {
     return `${Math.floor(days / 30)} mesi fa`;
   };
 
-  const renderPressRelease = ({ item }: { item: any }) => {
-    const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft;
-    
+  const renderPressRelease = ({ item }: { item: PressRelease }) => {
     return (
       <Pressable
         style={({ pressed }) => [
@@ -93,12 +122,15 @@ export default function HistoryScreen() {
           Alert.alert(
             item.title,
             `${item.subtitle ? item.subtitle + "\n\n" : ""}${item.content.slice(0, 300)}${item.content.length > 300 ? "..." : ""}\n\n📧 Destinatari: ${item.recipientCount || 0}\n📅 Inviato: ${formatDate(item.sentAt)}`,
-            [{ text: "Chiudi" }]
+            [
+              { text: "Elimina", style: "destructive", onPress: () => deleteItem(item.id) },
+              { text: "Chiudi" }
+            ]
           );
         }}
       >
-        {/* Status indicator bar */}
-        <View style={[styles.statusBar, { backgroundColor: statusConfig.color }]} />
+        {/* Status indicator bar - always green for sent */}
+        <View style={[styles.statusBar, { backgroundColor: "#388E3C" }]} />
         
         <View style={styles.cardBody}>
           <View style={styles.cardHeader}>
@@ -112,10 +144,10 @@ export default function HistoryScreen() {
                 </ThemedText>
               )}
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-              <ThemedText style={styles.statusIcon}>{statusConfig.icon}</ThemedText>
-              <ThemedText style={[styles.statusText, { color: statusConfig.color }]}>
-                {STATUS_LABELS[item.status] || item.status}
+            <View style={[styles.statusBadge, { backgroundColor: "#E8F5E9" }]}>
+              <ThemedText style={styles.statusIcon}>✅</ThemedText>
+              <ThemedText style={[styles.statusText, { color: "#388E3C" }]}>
+                Inviato
               </ThemedText>
             </View>
           </View>
@@ -134,10 +166,10 @@ export default function HistoryScreen() {
             <View style={styles.footerStat}>
               <ThemedText style={styles.footerIcon}>📅</ThemedText>
               <ThemedText style={styles.footerValue}>
-                {getRelativeTime(item.sentAt || item.createdAt)}
+                {getRelativeTime(item.sentAt)}
               </ThemedText>
             </View>
-            {item.category && (
+            {item.category && item.category !== "all" && (
               <>
                 <View style={styles.footerDivider} />
                 <View style={styles.categoryTag}>
@@ -151,33 +183,9 @@ export default function HistoryScreen() {
     );
   };
 
-  if (!isAuthenticated) {
-    return (
-      <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>
-        <LinearGradient
-          colors={["#2E7D32", "#43A047"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}
-        >
-          <ThemedText style={styles.title}>Storico Invii</ThemedText>
-        </LinearGradient>
-        <View style={styles.loginPrompt}>
-          <View style={styles.loginIcon}>
-            <ThemedText style={styles.loginIconText}>🔐</ThemedText>
-          </View>
-          <ThemedText style={styles.loginTitle}>Accesso richiesto</ThemedText>
-          <ThemedText style={styles.loginText}>
-            Effettua il login per visualizzare lo storico dei tuoi comunicati stampa.
-          </ThemedText>
-        </View>
-      </ThemedView>
-    );
-  }
-
   // Calculate stats
-  const totalSent = pressReleases?.filter(p => p.status === "sent").length || 0;
-  const totalRecipients = pressReleases?.reduce((acc, p) => acc + (p.recipientCount || 0), 0) || 0;
+  const totalSent = pressReleases.length;
+  const totalRecipients = pressReleases.reduce((acc, p) => acc + (p.recipientCount || 0), 0);
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>
@@ -190,7 +198,7 @@ export default function HistoryScreen() {
       >
         <ThemedText style={styles.title}>Storico Invii</ThemedText>
         <ThemedText style={styles.subtitle}>
-          {pressReleases?.length || 0} comunicati totali
+          {pressReleases.length} comunicati totali
         </ThemedText>
         
         {/* Quick Stats */}
@@ -235,7 +243,7 @@ export default function HistoryScreen() {
               <ThemedText style={styles.emptyIcon}>📭</ThemedText>
               <ThemedText style={styles.emptyTitle}>Nessun comunicato</ThemedText>
               <ThemedText style={styles.emptyText}>
-                I comunicati stampa inviati appariranno qui.
+                I comunicati stampa inviati appariranno qui.{"\n"}Vai alla Home per creare il tuo primo comunicato!
               </ThemedText>
             </View>
           }
@@ -433,38 +441,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 15,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  
-  // Login Prompt
-  loginPrompt: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 40,
-  },
-  loginIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  loginIconText: {
-    fontSize: 36,
-  },
-  loginTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 8,
-  },
-  loginText: {
     fontSize: 15,
     color: "#666",
     textAlign: "center",

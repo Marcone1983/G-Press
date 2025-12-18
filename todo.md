@@ -73,3 +73,10 @@
 - [x] Analizzare e scaricare dataset trovati (US News Domains 5397, News Homepages 1167)
 - [x] Estrarre nome ed email valide (5975 contatti unici)
 - [x] Caricare nel database G-Press (totale: 8.546 contatti)
+
+## Nuove Funzionalità Richieste
+- [x] Esportare tutti i contatti in file JSON per APK standalone (9.001 contatti)
+- [x] Aggiungere funzionalità per aggiungere giornalisti manualmente nell'app
+- [x] App funziona offline con dati locali (AsyncStorage)
+- [x] Storico invii salvato localmente
+- [ ] Configurare sistema invio email reale con Resend API (opzionale)
