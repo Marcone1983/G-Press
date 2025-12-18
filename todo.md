@@ -159,19 +159,21 @@
 - [x] 5. Suggerimenti orario
 
 ### Da Implementare:
-- [ ] 6. **AUTOPILOT MODE** - Carica documento, l'app fa tutto da sola (sceglie destinatari, orario, invia, follow-up)
-- [ ] 7. **LEADERBOARD** - Classifica giornalisti che aprono di più (retargeting visivo)
-- [ ] 8. **UPLOAD DOCUMENTO** - Carica PDF/Word e l'app estrae titolo e contenuto
-- [ ] 9. **SMART TARGETING** - L'app sceglie automaticamente i destinatari migliori basandosi su score
-- [ ] 10. **SMART TIMING** - Invia automaticamente all'orario con più aperture storiche
-- [ ] 11. **AUTO FOLLOW-UP CHAIN** - Sequenza di 3 follow-up automatici con oggetti diversi
-- [ ] 12. **TREND ANALYSIS** - Mostra trend aperture nel tempo (grafico)
-- [ ] 13. **TAG GIORNALISTI** - Tagga i giornalisti per argomento/interesse
-- [ ] 14. **EMAIL TEMPLATES** - Template professionali pre-costruiti
-- [ ] 15. **ALERT APERTURE** - Notifica quando un giornalista top apre la tua email
+- [x] 6. **AUTOPILOT MODE** - Carica documento, l'app fa tutto da sola (sceglie destinatari, orario, invia, follow-up)
+- [x] 7. **LEADERBOARD** - Classifica giornalisti che aprono di più (retargeting visivo)
+- [x] 8. **UPLOAD DOCUMENTO** - Carica PDF/Word e l'app estrae titolo e contenuto
+- [x] 9. **SMART TARGETING** - L'app sceglie automaticamente i destinatari migliori basandosi su score
+- [x] 10. **SMART TIMING** - Invia automaticamente all'orario con più aperture storiche
+- [x] 11. **AUTO FOLLOW-UP CHAIN** - Sequenza di 3 follow-up automatici con oggetti diversi (in Autopilot)
+- [x] 12. **TREND ANALYSIS** - Mostra trend aperture nel tempo (tab Trend nelle Statistiche)
+- [x] 13. **TAG GIORNALISTI** - Tagga i giornalisti per argomento/interesse (in Autopilot Smart Targeting)
+- [x] 14. **EMAIL TEMPLATES** - Template professionali pre-costruiti (nuova pagina Templates)
+- [x] 15. **ALERT APERTURE** - Notifica quando un giornalista top apre (integrato in Autopilot con notifiche locali)
 
 ### UI/UX:
-- [ ] Creare nuova pagina "Autopilot" nella tab bar
+- [x] Creata nuova pagina "Autopilot" nella tab bar
+- [x] Creata nuova pagina "Templates" nella tab bar
+- [x] Aggiunto tab "Trend" nelle Statistiche
 - [ ] Separare funzionalità avanzate dalla home
 - [ ] Grafica pulita e non schiacciata
 

@@ -51,6 +51,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="autopilot"
+        options={{
+          title: "Autopilot",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bolt.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="templates"
+        options={{
+          title: "Templates",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="stats"
         options={{
           title: "Statistiche",

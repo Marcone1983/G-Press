@@ -25,6 +25,7 @@ const MAPPING = {
   "envelope.fill": "email",
   "checkmark.circle.fill": "check-circle",
   "chart.bar.fill": "bar-chart",
+  "bolt.fill": "bolt",
 } as IconMapping;
 
 /**
