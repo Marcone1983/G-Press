@@ -188,3 +188,11 @@
 - [x] Correggere prompt AI: vietare sezioni sfide/difficoltà/problemi
 - [x] Correggere prompt AI: usare SOLO info dai documenti
 - [x] Correggere prompt AI: non nominare mai "documenti" o "comunicato"
+
+
+## Gestione Contatti e Selezione Giornalisti
+- [x] Mostrare lista giornalisti selezionati (non solo numero)
+- [x] Modifica contatti importati (nome, email, testata, etc.)
+- [x] Selezione manuale giornalisti con checkbox
+- [ ] Creare gruppi/playlist personalizzate (prossima versione)
+- [x] Categoria automatica dal nome del file CSV importato

@@ -113,6 +113,15 @@ export default function ContactsScreen() {
   const [outletToScrape, setOutletToScrape] = useState("");
   const [scraping, setScraping] = useState(false);
   
+  // Edit contact state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<Journalist | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editOutlet, setEditOutlet] = useState("");
+  const [editCountry, setEditCountry] = useState("");
+  const [editCategory, setEditCategory] = useState("general");
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
@@ -203,6 +212,52 @@ export default function ContactsScreen() {
       ]
     );
   };
+  
+  // Open edit modal for a contact
+  const openEditModal = (contact: Journalist) => {
+    setEditingContact(contact);
+    setEditName(contact.name);
+    setEditEmail(contact.email);
+    setEditOutlet(contact.outlet || "");
+    setEditCountry(contact.country || "");
+    setEditCategory(contact.category || "general");
+    setShowEditModal(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  
+  // Save edited contact
+  const saveEditedContact = async () => {
+    if (!editingContact) return;
+    if (!editName.trim() || !editEmail.trim()) {
+      Alert.alert("Errore", "Nome ed email sono obbligatori");
+      return;
+    }
+    
+    try {
+      const updated = customJournalists.map(j => {
+        if (j.id === editingContact.id) {
+          return {
+            ...j,
+            name: editName.trim(),
+            email: editEmail.trim().toLowerCase(),
+            outlet: editOutlet.trim(),
+            country: editCountry.trim() || "Internazionale",
+            category: editCategory,
+          };
+        }
+        return j;
+      });
+      
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      setCustomJournalists(updated);
+      setShowEditModal(false);
+      setEditingContact(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Salvato", "Contatto modificato con successo!");
+    } catch (error) {
+      Alert.alert("Errore", "Impossibile salvare le modifiche");
+    }
+  };
 
   // Import CSV function
   const importCSV = async () => {
@@ -218,6 +273,10 @@ export default function ContactsScreen() {
 
       setImporting(true);
       const file = result.assets[0];
+      
+      // Extract category from filename (e.g., "Holders.csv" -> "holders")
+      const fileName = file.name || "";
+      const fileCategory = fileName.replace(/\.csv$/i, "").toLowerCase().trim() || "general";
       
       // Read file content
       const content = await FileSystem.readAsStringAsync(file.uri);
@@ -266,13 +325,18 @@ export default function ContactsScreen() {
         }
 
         existingEmails.add(email);
+        // Use category from CSV if present, otherwise use filename as category
+        const rowCategory = categoryIdx >= 0 && values[categoryIdx]?.trim() 
+          ? values[categoryIdx].toLowerCase().trim() 
+          : fileCategory;
+        
         newContacts.push({
           id: Date.now() + i,
           name: nameIdx >= 0 ? values[nameIdx] || email.split("@")[0] : email.split("@")[0],
           email: email,
           outlet: outletIdx >= 0 ? values[outletIdx] || "Importato" : "Importato",
           country: countryIdx >= 0 ? values[countryIdx] || "Internazionale" : "Internazionale",
-          category: categoryIdx >= 0 ? values[categoryIdx]?.toLowerCase() || "general" : "general",
+          category: rowCategory,
           active: true,
           isCustom: true,
         });
@@ -448,14 +512,15 @@ export default function ContactsScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const actions = item.isCustom 
           ? [
+              { text: "Modifica", onPress: () => openEditModal(item) },
               { text: "Elimina", style: "destructive" as const, onPress: () => deleteCustomJournalist(item.id) },
-              { text: "OK" }
+              { text: "Chiudi", style: "cancel" as const }
             ]
           : [{ text: "OK" }];
         
         Alert.alert(
           item.name,
-          `📧 ${item.email}\n📰 ${item.outlet || "N/A"}\n🌍 ${COUNTRY_FLAGS[item.country] || "🌍"} ${item.country || "N/A"}\n🏷️ ${item.category}${item.isCustom ? "\n⭐ Aggiunto manualmente" : ""}`,
+          `📧 ${item.email}\n📰 ${item.outlet || "N/A"}\n🌍 ${COUNTRY_FLAGS[item.country] || "🌍"} ${item.country || "N/A"}\n🏷️ ${item.category}${item.isCustom ? "\n⭐ Contatto personalizzato" : ""}`,
           actions
         );
       }}
@@ -806,6 +871,102 @@ export default function ContactsScreen() {
             <ThemedText style={styles.linkedInNote}>
               ℹ️ Vengono estratte solo email pubblicamente visibili nelle pagine Redazione/Contatti.
             </ThemedText>
+            
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+      
+      {/* Edit Contact Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalContainer}
+        >
+          <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 20) }]}>
+            <Pressable onPress={() => setShowEditModal(false)}>
+              <ThemedText style={styles.modalCancel}>Annulla</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>Modifica Contatto</ThemedText>
+            <Pressable onPress={saveEditedContact}>
+              <ThemedText style={styles.modalSave}>Salva</ThemedText>
+            </Pressable>
+          </View>
+          
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Nome *</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Nome completo"
+                placeholderTextColor="#999"
+                value={editName}
+                onChangeText={setEditName}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Email *</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="email@esempio.com"
+                placeholderTextColor="#999"
+                value={editEmail}
+                onChangeText={setEditEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Testata</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: Il Sole 24 Ore"
+                placeholderTextColor="#999"
+                value={editOutlet}
+                onChangeText={setEditOutlet}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Paese</ThemedText>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Es: Italia"
+                placeholderTextColor="#999"
+                value={editCountry}
+                onChangeText={setEditCountry}
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.formLabel}>Categoria</ThemedText>
+              <View style={styles.categoryGrid}>
+                {CATEGORY_OPTIONS.map(cat => (
+                  <Pressable
+                    key={cat.value}
+                    style={[
+                      styles.categoryOption,
+                      editCategory === cat.value && styles.categoryOptionActive,
+                    ]}
+                    onPress={() => setEditCategory(cat.value)}
+                  >
+                    <ThemedText style={[
+                      styles.categoryOptionText,
+                      editCategory === cat.value && styles.categoryOptionTextActive,
+                    ]}>
+                      {cat.label}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
             
             <View style={{ height: 100 }} />
           </ScrollView>

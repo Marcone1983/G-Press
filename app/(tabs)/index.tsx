@@ -115,6 +115,11 @@ export default function HomeScreen() {
   const [templateName, setTemplateName] = useState("");
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   
+  // Recipients list modal and manual selection
+  const [showRecipientsModal, setShowRecipientsModal] = useState(false);
+  const [manuallySelectedIds, setManuallySelectedIds] = useState<Set<number>>(new Set());
+  const [useManualSelection, setUseManualSelection] = useState(false);
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
@@ -279,6 +284,38 @@ export default function HomeScreen() {
 
   const totalCount = allJournalists.length;
   const filteredCount = filteredJournalists.length;
+  
+  // Final recipients: either manually selected or filtered
+  const finalRecipients = useMemo(() => {
+    if (useManualSelection && manuallySelectedIds.size > 0) {
+      return allJournalists.filter(j => manuallySelectedIds.has(j.id));
+    }
+    return filteredJournalists;
+  }, [useManualSelection, manuallySelectedIds, allJournalists, filteredJournalists]);
+  
+  const recipientCount = finalRecipients.length;
+  
+  // Toggle journalist selection
+  const toggleJournalistSelection = (id: number) => {
+    setManuallySelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+    if (!useManualSelection) setUseManualSelection(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  
+  // Clear manual selection and use filters
+  const clearManualSelection = () => {
+    setManuallySelectedIds(new Set());
+    setUseManualSelection(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
 
   const saveToHistory = async (pressRelease: any) => {
     try {
@@ -740,21 +777,31 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Floating Send Button */}
+      {/* Floating Send Button with Recipients Preview */}
       <View
         style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}
       >
+        {/* Button to see recipients list */}
+        <Pressable
+          style={styles.viewRecipientsButton}
+          onPress={() => setShowRecipientsModal(true)}
+        >
+          <ThemedText style={styles.viewRecipientsText}>
+            👥 {useManualSelection ? "Selezionati" : "Filtrati"}: {recipientCount} giornalisti - Tocca per vedere/selezionare
+          </ThemedText>
+        </Pressable>
+        
         <Pressable
           style={({ pressed }) => [
             styles.sendButton,
-            (sending || filteredCount === 0) && styles.sendButtonDisabled,
+            (sending || recipientCount === 0) && styles.sendButtonDisabled,
             pressed && styles.sendButtonPressed,
           ]}
           onPress={handleSend}
-          disabled={sending || filteredCount === 0}
+          disabled={sending || recipientCount === 0}
         >
           <LinearGradient
-            colors={filteredCount === 0 ? ["#BDBDBD", "#9E9E9E"] : ["#2E7D32", "#43A047"]}
+            colors={recipientCount === 0 ? ["#BDBDBD", "#9E9E9E"] : ["#2E7D32", "#43A047"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.sendButtonGradient}
@@ -765,7 +812,7 @@ export default function HomeScreen() {
               <>
                 <ThemedText style={styles.sendButtonIcon}>📤</ThemedText>
                 <ThemedText style={styles.sendButtonText}>
-                  Invia a {filteredCount.toLocaleString()} Giornalisti
+                  Invia a {recipientCount.toLocaleString()} Giornalisti
                   {selectedImages.length > 0 && ` (${selectedImages.length} 📷)`}
                 </ThemedText>
               </>
@@ -773,6 +820,79 @@ export default function HomeScreen() {
           </LinearGradient>
         </Pressable>
       </View>
+      
+      {/* Recipients List Modal */}
+      <Modal
+        visible={showRecipientsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRecipientsModal(false)}
+      >
+        <View style={[styles.recipientsModalContainer, { paddingTop: Math.max(insets.top, 20) }]}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setShowRecipientsModal(false)}>
+              <ThemedText style={styles.modalClose}>✕</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>
+              {useManualSelection ? "Giornalisti Selezionati" : "Destinatari Filtrati"}
+            </ThemedText>
+            <View style={{ width: 30 }} />
+          </View>
+          
+          {useManualSelection && manuallySelectedIds.size > 0 && (
+            <Pressable style={styles.clearSelectionBtn} onPress={clearManualSelection}>
+              <ThemedText style={styles.clearSelectionText}>🗑️ Usa filtri invece della selezione manuale</ThemedText>
+            </Pressable>
+          )}
+          
+          <ThemedText style={styles.recipientsHint}>
+            Tocca un giornalista per selezionarlo/deselezionarlo manualmente
+          </ThemedText>
+          
+          <FlatList
+            data={filteredJournalists}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => {
+              const isSelected = useManualSelection 
+                ? manuallySelectedIds.has(item.id)
+                : true;
+              return (
+                <Pressable
+                  style={[
+                    styles.recipientItem,
+                    isSelected && styles.recipientItemSelected
+                  ]}
+                  onPress={() => toggleJournalistSelection(item.id)}
+                >
+                  <View style={styles.recipientCheckbox}>
+                    {isSelected && <ThemedText style={styles.checkmark}>✓</ThemedText>}
+                  </View>
+                  <View style={styles.recipientInfo}>
+                    <ThemedText style={styles.recipientName}>{item.name}</ThemedText>
+                    <ThemedText style={styles.recipientOutlet}>{item.outlet}</ThemedText>
+                    <ThemedText style={styles.recipientEmail}>{item.email}</ThemedText>
+                  </View>
+                </Pressable>
+              );
+            }}
+            ListEmptyComponent={
+              <ThemedText style={styles.emptyText}>Nessun giornalista trovato con i filtri attuali</ThemedText>
+            }
+          />
+          
+          <View style={styles.modalFooter}>
+            <ThemedText style={styles.selectedCount}>
+              {useManualSelection ? manuallySelectedIds.size : filteredCount} giornalisti selezionati
+            </ThemedText>
+            <Pressable
+              style={styles.confirmRecipientsBtn}
+              onPress={() => setShowRecipientsModal(false)}
+            >
+              <ThemedText style={styles.confirmRecipientsBtnText}>Conferma</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1175,5 +1295,117 @@ const styles = StyleSheet.create({
   templateDelete: {
     fontSize: 18,
     padding: 8,
+  },
+  
+  // Recipients Modal Styles
+  viewRecipientsButton: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  viewRecipientsText: {
+    fontSize: 14,
+    color: "#2E7D32",
+    fontWeight: "600",
+  },
+  clearSelectionBtn: {
+    backgroundColor: "#FFF3E0",
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  clearSelectionText: {
+    color: "#E65100",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  recipientsHint: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  recipientItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  recipientItemSelected: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#4CAF50",
+  },
+  recipientCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    backgroundColor: "#FFFFFF",
+  },
+  checkmark: {
+    color: "#4CAF50",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  recipientInfo: {
+    flex: 1,
+  },
+  recipientName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  recipientOutlet: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
+  },
+  recipientEmail: {
+    fontSize: 12,
+    color: "#2E7D32",
+    marginTop: 2,
+  },
+  modalFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    backgroundColor: "#FFFFFF",
+  },
+  selectedCount: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  confirmRecipientsBtn: {
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  confirmRecipientsBtnText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  recipientsModalContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
   },
 });
