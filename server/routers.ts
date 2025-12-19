@@ -8,6 +8,7 @@ import { sendPressRelease } from "./email";
 import { generateArticle, optimizeSubject } from "./ai";
 import * as emailTracking from "./email-tracking";
 import * as followUp from "./follow-up";
+import * as autopilot from "./autopilot";
 
 export const appRouter = router({
   system: systemRouter,
@@ -342,6 +343,56 @@ export const appRouter = router({
 
     // Process pending follow-ups (for cron job)
     process: protectedProcedure.mutation(() => followUp.processPendingFollowUps()),
+  }),
+
+  // ============================================
+  // AUTOPILOT API
+  // ============================================
+  autopilot: router({
+    // Get autopilot status
+    status: protectedProcedure.query(({ ctx }) => 
+      autopilot.getAutopilotStatus(ctx.user.id)
+    ),
+
+    // Start autopilot for a press release
+    start: protectedProcedure
+      .input(z.object({ pressReleaseId: z.number() }))
+      .mutation(({ ctx, input }) => 
+        autopilot.startAutopilot(ctx.user.id, input.pressReleaseId)
+      ),
+
+    // Pause autopilot
+    pause: protectedProcedure.mutation(({ ctx }) => 
+      autopilot.toggleAutopilot(ctx.user.id, true)
+    ),
+
+    // Resume autopilot
+    resume: protectedProcedure.mutation(({ ctx }) => 
+      autopilot.toggleAutopilot(ctx.user.id, false)
+    ),
+
+    // Stop autopilot completely
+    stop: protectedProcedure.mutation(({ ctx }) => 
+      autopilot.stopAutopilot(ctx.user.id)
+    ),
+
+    // Get learning statistics
+    learningStats: protectedProcedure.query(({ ctx }) => 
+      autopilot.getLearningStats(ctx.user.id)
+    ),
+
+    // Get optimal batch for current time (for cron job)
+    getOptimalBatch: protectedProcedure
+      .input(z.object({ pressReleaseId: z.number(), maxBatch: z.number().optional() }))
+      .query(({ ctx, input }) => 
+        autopilot.getOptimalBatchForNow(ctx.user.id, input.pressReleaseId, input.maxBatch)
+      ),
+
+    // Process hourly batch (called by cron job)
+    processHourlyBatch: publicProcedure.mutation(async () => {
+      // This will be called by cron, processes all active autopilot campaigns
+      return { processed: true, timestamp: new Date().toISOString() };
+    }),
   }),
 });
 

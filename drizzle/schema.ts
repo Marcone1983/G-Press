@@ -83,6 +83,7 @@ export const pressReleases = mysqlTable("pressReleases", {
   recipientCount: int("recipientCount").default(0),
   openCount: int("openCount").default(0),
   clickCount: int("clickCount").default(0),
+  isAutopilotActive: boolean("isAutopilotActive").default(false), // Active autopilot campaign
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -182,3 +183,52 @@ export const followUpQueue = mysqlTable("followUpQueue", {
 
 export type FollowUpQueue = typeof followUpQueue.$inferSelect;
 export type InsertFollowUpQueue = typeof followUpQueue.$inferInsert;
+
+
+/**
+ * Intelligent send patterns - stores learned patterns for optimal sending
+ * This data is PERMANENT and never deleted
+ */
+export const sendPatterns = mysqlTable("sendPatterns", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  country: varchar("country", { length: 2 }).notNull(), // IT, US, UK, etc.
+  category: mysqlEnum("category", [
+    "technology", "business", "finance", "health", "sports",
+    "entertainment", "politics", "lifestyle", "general"
+  ]).default("general").notNull(),
+  dayOfWeek: int("dayOfWeek").notNull(), // 0=Sunday, 1=Monday, etc.
+  hourOfDay: int("hourOfDay").notNull(), // 0-23
+  totalSent: int("totalSent").default(0).notNull(),
+  totalOpened: int("totalOpened").default(0).notNull(),
+  totalClicked: int("totalClicked").default(0).notNull(),
+  openRate: int("openRate").default(0).notNull(), // Percentage * 100 for precision
+  clickRate: int("clickRate").default(0).notNull(), // Percentage * 100
+  score: int("score").default(0).notNull(), // Calculated optimal score
+  lastUpdated: timestamp("lastUpdated").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SendPattern = typeof sendPatterns.$inferSelect;
+export type InsertSendPattern = typeof sendPatterns.$inferInsert;
+
+/**
+ * Autopilot campaigns - tracks active autopilot runs
+ */
+export const autopilotCampaigns = mysqlTable("autopilotCampaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  pressReleaseId: int("pressReleaseId").notNull(),
+  status: mysqlEnum("status", ["active", "paused", "completed", "cancelled"]).default("active").notNull(),
+  totalJournalists: int("totalJournalists").default(0).notNull(),
+  sentCount: int("sentCount").default(0).notNull(),
+  openedCount: int("openedCount").default(0).notNull(),
+  dailyBatchSize: int("dailyBatchSize").default(1286).notNull(), // 9000/7
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  lastBatchAt: timestamp("lastBatchAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AutopilotCampaign = typeof autopilotCampaigns.$inferSelect;
+export type InsertAutopilotCampaign = typeof autopilotCampaigns.$inferInsert;

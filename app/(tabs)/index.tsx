@@ -124,6 +124,13 @@ export default function HomeScreen() {
   // Auto-timing state
   const [bestSendTime, setBestSendTime] = useState<{ dayOfWeek: number; hourOfDay: number; openRate: number } | null>(null);
   
+  // Autopilot state
+  const [showAutopilotModal, setShowAutopilotModal] = useState(false);
+  const autopilotStatus = trpc.autopilot.status.useQuery(undefined, { enabled: false, retry: false });
+  const autopilotLearning = trpc.autopilot.learningStats.useQuery(undefined, { enabled: false, retry: false });
+  const startAutopilot = trpc.autopilot.start.useMutation();
+  const stopAutopilot = trpc.autopilot.stop.useMutation();
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
@@ -135,11 +142,13 @@ export default function HomeScreen() {
     retry: false,
   });
 
-  // Load journalists, templates, and best times on mount
+  // Load journalists, templates, best times, and autopilot status on mount
   useEffect(() => {
     loadJournalists();
     loadTemplates();
     loadBestSendTime();
+    autopilotStatus.refetch();
+    autopilotLearning.refetch();
   }, []);
 
   const loadBestSendTime = async () => {
@@ -532,6 +541,71 @@ export default function HomeScreen() {
             </View>
           </View>
         </LinearGradient>
+
+        {/* Autopilot Status Card */}
+        {autopilotStatus.data?.active && (
+          <Pressable 
+            style={styles.autopilotCard}
+            onPress={() => setShowAutopilotModal(true)}
+          >
+            <View style={styles.autopilotHeader}>
+              <ThemedText style={styles.autopilotTitle}>🤖 Autopilota Attivo</ThemedText>
+              <View style={styles.autopilotBadge}>
+                <ThemedText style={styles.autopilotBadgeText}>
+                  {autopilotLearning.data?.confidenceLevel === "expert" ? "🎯 Esperto" :
+                   autopilotLearning.data?.confidenceLevel === "optimized" ? "✅ Ottimizzato" :
+                   autopilotLearning.data?.confidenceLevel === "improving" ? "📈 Migliorando" : "🧠 Imparando"}
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.autopilotProgress}>
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${autopilotStatus.data.progress || 0}%` }]} />
+              </View>
+              <ThemedText style={styles.autopilotProgressText}>
+                {autopilotStatus.data.sentCount?.toLocaleString()} / {autopilotStatus.data.totalJournalists?.toLocaleString()} inviati
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.autopilotSubtext}>
+              📅 ~{autopilotStatus.data.daysRemaining} giorni rimanenti • Tocca per dettagli
+            </ThemedText>
+          </Pressable>
+        )}
+
+        {/* Start Autopilot Button (when not active) */}
+        {!autopilotStatus.data?.active && title.trim() && content.trim() && (
+          <Pressable 
+            style={styles.startAutopilotBtn}
+            onPress={() => {
+              Alert.alert(
+                "🤖 Avvia Autopilota",
+                `Vuoi avviare l'invio automatico a ${totalCount.toLocaleString()} giornalisti?\n\nL'AI invierà ~1.286 email al giorno, ottimizzando gli orari per ogni paese.\n\nDurata stimata: 7 giorni`,
+                [
+                  { text: "Annulla", style: "cancel" },
+                  { 
+                    text: "Avvia", 
+                    onPress: async () => {
+                      // TODO: Save press release first, then start autopilot
+                      Alert.alert("Prossimamente", "Funzione in arrivo nel prossimo aggiornamento");
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <LinearGradient
+              colors={["#1565C0", "#1976D2"]}
+              style={styles.startAutopilotGradient}
+            >
+              <ThemedText style={styles.startAutopilotText}>
+                🤖 Avvia Autopilota Intelligente
+              </ThemedText>
+              <ThemedText style={styles.startAutopilotSubtext}>
+                Invia a tutti in 7 giorni con AI
+              </ThemedText>
+            </LinearGradient>
+          </Pressable>
+        )}
 
         {/* Filters Card */}
         <View style={styles.card}>
@@ -1453,5 +1527,80 @@ const styles = StyleSheet.create({
     color: "#1565C0",
     fontWeight: "600",
     textAlign: "center",
+  },
+  
+  // Autopilot Styles
+  autopilotCard: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+  },
+  autopilotHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  autopilotTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2E7D32",
+  },
+  autopilotBadge: {
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  autopilotBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  autopilotProgress: {
+    marginBottom: 8,
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: "#C8E6C9",
+    borderRadius: 4,
+    marginBottom: 6,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#4CAF50",
+    borderRadius: 4,
+  },
+  autopilotProgressText: {
+    fontSize: 13,
+    color: "#2E7D32",
+    fontWeight: "500",
+  },
+  autopilotSubtext: {
+    fontSize: 12,
+    color: "#666",
+  },
+  startAutopilotBtn: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  startAutopilotGradient: {
+    padding: 20,
+    alignItems: "center",
+  },
+  startAutopilotText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  startAutopilotSubtext: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
   },
 });

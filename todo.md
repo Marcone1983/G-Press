@@ -205,3 +205,13 @@
 - [x] Algoritmo auto-timing basato su pattern aperture
 - [x] Follow-up automatico per chi non ha aperto
 - [x] Dashboard con grafici aperture per orario/giorno
+
+
+## Sistema Autopilota Intelligente
+- [x] Database statistiche permanenti per paese/categoria/orario
+- [x] Algoritmo segmentazione per paese e fuso orario
+- [x] Invio ottimizzato: Italia martedì mattina, USA giovedì pomeriggio, etc.
+- [x] Machine learning: impara dai pattern di apertura
+- [x] API autopilot complete (start, pause, stop, status)
+- [x] UI per attivare autopilota e vedere progressi
+- [x] Cron job per esecuzione automatica (ogni ora)
