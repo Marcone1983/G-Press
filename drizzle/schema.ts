@@ -124,3 +124,61 @@ export const templates = mysqlTable("templates", {
 
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = typeof templates.$inferInsert;
+
+/**
+ * Email events tracking (opens, clicks, bounces from Resend webhooks)
+ */
+export const emailEvents = mysqlTable("emailEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  distributionId: int("distributionId").notNull(),
+  eventType: mysqlEnum("eventType", ["sent", "delivered", "opened", "clicked", "bounced", "complained", "unsubscribed"]).notNull(),
+  emailId: varchar("emailId", { length: 255 }), // Resend email ID
+  recipientEmail: varchar("recipientEmail", { length: 320 }),
+  userAgent: text("userAgent"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  country: varchar("country", { length: 2 }),
+  city: varchar("city", { length: 100 }),
+  clickedUrl: text("clickedUrl"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  rawData: json("rawData"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EmailEvent = typeof emailEvents.$inferSelect;
+export type InsertEmailEvent = typeof emailEvents.$inferInsert;
+
+/**
+ * Email analytics aggregated by hour/day for auto-timing
+ */
+export const emailAnalytics = mysqlTable("emailAnalytics", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  dayOfWeek: int("dayOfWeek").notNull(), // 0-6 (Sunday-Saturday)
+  hourOfDay: int("hourOfDay").notNull(), // 0-23
+  totalSent: int("totalSent").default(0).notNull(),
+  totalOpened: int("totalOpened").default(0).notNull(),
+  totalClicked: int("totalClicked").default(0).notNull(),
+  avgOpenTimeMinutes: int("avgOpenTimeMinutes"), // Average time to open after send
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailAnalytics = typeof emailAnalytics.$inferSelect;
+export type InsertEmailAnalytics = typeof emailAnalytics.$inferInsert;
+
+/**
+ * Follow-up queue for automatic re-sends
+ */
+export const followUpQueue = mysqlTable("followUpQueue", {
+  id: int("id").autoincrement().primaryKey(),
+  distributionId: int("distributionId").notNull(),
+  pressReleaseId: int("pressReleaseId").notNull(),
+  journalistId: int("journalistId").notNull(),
+  followUpNumber: int("followUpNumber").default(1).notNull(), // 1st, 2nd, 3rd follow-up
+  scheduledAt: timestamp("scheduledAt").notNull(),
+  status: mysqlEnum("status", ["pending", "sent", "cancelled", "skipped"]).default("pending").notNull(),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FollowUpQueue = typeof followUpQueue.$inferSelect;
+export type InsertFollowUpQueue = typeof followUpQueue.$inferInsert;

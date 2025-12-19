@@ -6,6 +6,8 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { sendPressRelease } from "./email";
 import { generateArticle, optimizeSubject } from "./ai";
+import * as emailTracking from "./email-tracking";
+import * as followUp from "./follow-up";
 
 export const appRouter = router({
   system: systemRouter,
@@ -287,6 +289,59 @@ export const appRouter = router({
         website: z.string().optional(),
       }))
       .mutation(({ ctx, input }) => db.saveCompanyInfo(ctx.user.id, input)),
+  }),
+
+  // ============================================
+  // STATISTICS & ANALYTICS API
+  // ============================================
+  stats: router({
+    // Get overall email statistics
+    overview: protectedProcedure.query(({ ctx }) => 
+      emailTracking.getOverallStats(ctx.user.id)
+    ),
+
+    // Get stats for a specific press release
+    byPressRelease: protectedProcedure
+      .input(z.object({ pressReleaseId: z.number() }))
+      .query(({ input }) => emailTracking.getEmailStats(input.pressReleaseId)),
+
+    // Get opens by hour for chart
+    opensByHour: protectedProcedure.query(({ ctx }) => 
+      emailTracking.getOpensByHour(ctx.user.id)
+    ),
+
+    // Get opens by day for chart
+    opensByDay: protectedProcedure.query(({ ctx }) => 
+      emailTracking.getOpensByDay(ctx.user.id)
+    ),
+
+    // Get best send times based on analytics
+    bestSendTimes: protectedProcedure.query(({ ctx }) => 
+      emailTracking.getBestSendTimes(ctx.user.id)
+    ),
+  }),
+
+  // ============================================
+  // FOLLOW-UP API
+  // ============================================
+  followUp: router({
+    // Get follow-up status for a press release
+    status: protectedProcedure
+      .input(z.object({ pressReleaseId: z.number() }))
+      .query(({ input }) => followUp.getFollowUpStatus(input.pressReleaseId)),
+
+    // Get pending follow-ups count
+    pendingCount: protectedProcedure.query(({ ctx }) => 
+      followUp.getPendingFollowUpsCount(ctx.user.id)
+    ),
+
+    // Cancel all follow-ups for a press release
+    cancel: protectedProcedure
+      .input(z.object({ pressReleaseId: z.number() }))
+      .mutation(({ input }) => followUp.cancelFollowUps(input.pressReleaseId)),
+
+    // Process pending follow-ups (for cron job)
+    process: protectedProcedure.mutation(() => followUp.processPendingFollowUps()),
   }),
 });
 

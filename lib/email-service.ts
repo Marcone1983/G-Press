@@ -227,6 +227,41 @@ export async function getAggregateStats(): Promise<EmailStats> {
 }
 
 /**
+ * Get statistics from database via tRPC (real data)
+ * Falls back to Resend API if database not available
+ */
+export async function getStatsFromDatabase(): Promise<EmailStats | null> {
+  // This will be called from the component using tRPC
+  // The actual implementation is in server/email-tracking.ts
+  return null;
+}
+
+/**
+ * Get best send times from analytics
+ */
+export interface BestSendTime {
+  dayOfWeek: number;
+  hourOfDay: number;
+  openRate: number;
+}
+
+/**
+ * Get hourly open data for chart
+ */
+export interface HourlyData {
+  hour: number;
+  opens: number;
+}
+
+/**
+ * Get daily open data for chart
+ */
+export interface DailyData {
+  day: string;
+  opens: number;
+}
+
+/**
  * Format press release content as HTML email
  */
 export function formatPressReleaseEmail(params: {

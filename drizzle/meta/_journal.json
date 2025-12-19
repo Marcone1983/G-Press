@@ -15,6 +15,13 @@
       "when": 1766052768830,
       "tag": "0001_warm_ted_forrester",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766105361853,
+      "tag": "0002_massive_darkstar",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { sendEmailsWithAttachments, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
+import { trpc } from "@/lib/trpc";
 
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
@@ -120,16 +121,37 @@ export default function HomeScreen() {
   const [manuallySelectedIds, setManuallySelectedIds] = useState<Set<number>>(new Set());
   const [useManualSelection, setUseManualSelection] = useState(false);
   
+  // Auto-timing state
+  const [bestSendTime, setBestSendTime] = useState<{ dayOfWeek: number; hourOfDay: number; openRate: number } | null>(null);
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
 
-  // Load journalists and templates on mount
+  // tRPC query for best send times
+  const bestTimesQuery = trpc.stats.bestSendTimes.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
+
+  // Load journalists, templates, and best times on mount
   useEffect(() => {
     loadJournalists();
     loadTemplates();
+    loadBestSendTime();
   }, []);
+
+  const loadBestSendTime = async () => {
+    try {
+      const result = await bestTimesQuery.refetch();
+      if (result.data && result.data.length > 0) {
+        setBestSendTime(result.data[0]);
+      }
+    } catch (error) {
+      console.log("Best times not available yet");
+    }
+  };
 
   const loadTemplates = async () => {
     try {
@@ -781,6 +803,15 @@ export default function HomeScreen() {
       <View
         style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}
       >
+        {/* Best send time suggestion */}
+        {bestSendTime && (
+          <View style={styles.bestTimeBanner}>
+            <ThemedText style={styles.bestTimeBannerText}>
+              ⏰ Orario migliore: {["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"][bestSendTime.dayOfWeek]} ore {bestSendTime.hourOfDay}:00 ({bestSendTime.openRate.toFixed(0)}% aperture)
+            </ThemedText>
+          </View>
+        )}
+        
         {/* Button to see recipients list */}
         <Pressable
           style={styles.viewRecipientsButton}
@@ -1407,5 +1438,20 @@ const styles = StyleSheet.create({
   recipientsModalContainer: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+  },
+  bestTimeBanner: {
+    backgroundColor: "#E3F2FD",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#90CAF9",
+  },
+  bestTimeBannerText: {
+    fontSize: 13,
+    color: "#1565C0",
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

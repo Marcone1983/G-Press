@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,6 +15,7 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { trpc } from "@/lib/trpc";
 import {
   getAggregateStats,
   getEmailsList,
@@ -22,23 +24,84 @@ import {
   EmailDetail,
 } from "@/lib/email-service";
 
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+
 export default function StatsScreen() {
   const [stats, setStats] = useState<EmailStats | null>(null);
   const [emails, setEmails] = useState<EmailDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [bestTimes, setBestTimes] = useState<any[]>([]);
+  const [hourlyData, setHourlyData] = useState<any[]>([]);
+  const [dailyData, setDailyData] = useState<any[]>([]);
   const insets = useSafeAreaInsets();
+
+  // tRPC queries for database stats
+  const statsQuery = trpc.stats.overview.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
+  const bestTimesQuery = trpc.stats.bestSendTimes.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
+  const hourlyQuery = trpc.stats.opensByHour.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
+  const dailyQuery = trpc.stats.opensByDay.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
 
   const loadStats = useCallback(async () => {
     try {
+      // Try to get stats from database first
+      const [dbStats, dbBestTimes, dbHourly, dbDaily] = await Promise.all([
+        statsQuery.refetch().catch(() => null),
+        bestTimesQuery.refetch().catch(() => null),
+        hourlyQuery.refetch().catch(() => null),
+        dailyQuery.refetch().catch(() => null),
+      ]);
+
+      if (dbStats?.data) {
+        setStats({
+          total: dbStats.data.total,
+          delivered: dbStats.data.delivered,
+          opened: dbStats.data.opened,
+          clicked: dbStats.data.clicked,
+          bounced: dbStats.data.bounced,
+          complained: 0,
+        });
+      } else {
+        // Fallback to Resend API
+        const [statsData, emailsData] = await Promise.all([
+          getAggregateStats(),
+          getEmailsList(50),
+        ]);
+        setStats(statsData);
+        setEmails(emailsData);
+      }
+
+      if (dbBestTimes?.data) {
+        setBestTimes(dbBestTimes.data);
+      }
+      if (dbHourly?.data) {
+        setHourlyData(dbHourly.data);
+      }
+      if (dbDaily?.data) {
+        setDailyData(dbDaily.data);
+      }
+    } catch (error) {
+      console.error("Error loading stats:", error);
+      // Fallback to Resend API
       const [statsData, emailsData] = await Promise.all([
         getAggregateStats(),
         getEmailsList(50),
       ]);
       setStats(statsData);
       setEmails(emailsData);
-    } catch (error) {
-      console.error("Error loading stats:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -101,6 +164,18 @@ export default function StatsScreen() {
     }
   };
 
+  const formatHour = (hour: number) => {
+    return `${hour.toString().padStart(2, "0")}:00`;
+  };
+
+  const formatDayTime = (dayOfWeek: number, hourOfDay: number) => {
+    return `${DAY_NAMES[dayOfWeek]} ${formatHour(hourOfDay)}`;
+  };
+
+  // Calculate max value for chart scaling
+  const maxHourlyOpens = Math.max(...hourlyData.map((d) => d.opens), 1);
+  const maxDailyOpens = Math.max(...dailyData.map((d) => d.opens), 1);
+
   if (!isEmailConfigured()) {
     return (
       <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -147,7 +222,7 @@ export default function StatsScreen() {
             <View style={styles.headerText}>
               <ThemedText style={styles.headerTitle}>Statistiche</ThemedText>
               <ThemedText style={styles.headerSubtitle}>
-                Monitoraggio Email Resend
+                Analytics Email in Tempo Reale
               </ThemedText>
             </View>
           </View>
@@ -164,7 +239,7 @@ export default function StatsScreen() {
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: "#E3F2FD" }]}>
                 <ThemedText style={styles.statNumber}>{stats?.total || 0}</ThemedText>
-                <ThemedText style={styles.statLabel}>📧 Totali</ThemedText>
+                <ThemedText style={styles.statLabel}>📧 Inviate</ThemedText>
               </View>
               <View style={[styles.statCard, { backgroundColor: "#E8F5E9" }]}>
                 <ThemedText style={[styles.statNumber, { color: "#4CAF50" }]}>
@@ -229,11 +304,88 @@ export default function StatsScreen() {
               </View>
             )}
 
+            {/* Best Send Times */}
+            {bestTimes.length > 0 && (
+              <View style={styles.card}>
+                <ThemedText style={styles.cardTitle}>⏰ Orari Migliori per Inviare</ThemedText>
+                <ThemedText style={styles.cardSubtitle}>
+                  Basato sui tuoi dati di apertura
+                </ThemedText>
+                {bestTimes.slice(0, 5).map((time, index) => (
+                  <View key={index} style={styles.bestTimeRow}>
+                    <View style={styles.bestTimeRank}>
+                      <ThemedText style={styles.bestTimeRankText}>#{index + 1}</ThemedText>
+                    </View>
+                    <ThemedText style={styles.bestTimeText}>
+                      {formatDayTime(time.dayOfWeek, time.hourOfDay)}
+                    </ThemedText>
+                    <View style={styles.bestTimeRate}>
+                      <ThemedText style={styles.bestTimeRateText}>
+                        {time.openRate.toFixed(1)}% aperture
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Hourly Chart */}
+            {hourlyData.length > 0 && (
+              <View style={styles.card}>
+                <ThemedText style={styles.cardTitle}>📈 Aperture per Ora</ThemedText>
+                <View style={styles.chartContainer}>
+                  <View style={styles.barChart}>
+                    {hourlyData.map((data, index) => (
+                      <View key={index} style={styles.barContainer}>
+                        <View
+                          style={[
+                            styles.bar,
+                            {
+                              height: `${(data.opens / maxHourlyOpens) * 100}%`,
+                              backgroundColor: data.opens > 0 ? "#2E7D32" : "#E0E0E0",
+                            },
+                          ]}
+                        />
+                        {index % 4 === 0 && (
+                          <ThemedText style={styles.barLabel}>{data.hour}</ThemedText>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Daily Chart */}
+            {dailyData.length > 0 && (
+              <View style={styles.card}>
+                <ThemedText style={styles.cardTitle}>📅 Aperture per Giorno</ThemedText>
+                <View style={styles.dayChartContainer}>
+                  {dailyData.map((data, index) => (
+                    <View key={index} style={styles.dayBarContainer}>
+                      <View
+                        style={[
+                          styles.dayBar,
+                          {
+                            height: `${(data.opens / maxDailyOpens) * 100}%`,
+                            backgroundColor: data.opens > 0 ? "#2196F3" : "#E0E0E0",
+                          },
+                        ]}
+                      />
+                      <ThemedText style={styles.dayLabel}>{data.day}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* Recent Emails */}
             <View style={styles.card}>
               <ThemedText style={styles.cardTitle}>📬 Email Recenti</ThemedText>
               {emails.length === 0 ? (
-                <ThemedText style={styles.emptyText}>Nessuna email inviata</ThemedText>
+                <ThemedText style={styles.emptyText}>
+                  Le statistiche dettagliate appariranno dopo l'invio delle prime email
+                </ThemedText>
               ) : (
                 emails.slice(0, 20).map((email, index) => (
                   <View key={email.id || index} style={styles.emailItem}>
@@ -307,19 +459,19 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: "#fff",
   },
   headerSubtitle: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.85)",
+    color: "rgba(255,255,255,0.9)",
     marginTop: 2,
   },
   loadingContainer: {
-    alignItems: "center",
     padding: 40,
+    alignItems: "center",
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     color: "#666",
   },
   statsGrid: {
@@ -329,43 +481,43 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   statCard: {
-    width: "31%",
-    borderRadius: 16,
+    width: (SCREEN_WIDTH - 44) / 2,
     padding: 16,
+    borderRadius: 16,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   statNumber: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#333",
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#666",
     marginTop: 4,
-    textAlign: "center",
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 2,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 16,
+    color: "#333",
+    marginBottom: 12,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+    marginTop: -8,
   },
   percentageRow: {
     flexDirection: "row",
@@ -384,33 +536,121 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 4,
   },
+  bestTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  bestTimeRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E8F5E9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  bestTimeRankText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2E7D32",
+  },
+  bestTimeText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  bestTimeRate: {
+    backgroundColor: "#E3F2FD",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  bestTimeRateText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1976D2",
+  },
+  chartContainer: {
+    height: 120,
+    marginTop: 8,
+  },
+  barChart: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    height: 100,
+    gap: 2,
+  },
+  barContainer: {
+    flex: 1,
+    alignItems: "center",
+    height: "100%",
+    justifyContent: "flex-end",
+  },
+  bar: {
+    width: "80%",
+    borderRadius: 2,
+    minHeight: 2,
+  },
+  barLabel: {
+    fontSize: 9,
+    color: "#999",
+    marginTop: 4,
+  },
+  dayChartContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    height: 120,
+    gap: 8,
+    marginTop: 8,
+  },
+  dayBarContainer: {
+    flex: 1,
+    alignItems: "center",
+    height: 100,
+    justifyContent: "flex-end",
+  },
+  dayBar: {
+    width: "70%",
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  dayLabel: {
+    fontSize: 11,
+    color: "#666",
+    marginTop: 6,
+    fontWeight: "500",
+  },
   emailItem: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: "#f0f0f0",
   },
   emailHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   emailSubject: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "600",
-    color: "#1A1A1A",
-    flex: 1,
+    color: "#333",
     marginRight: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   statusText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: "#fff",
   },
   emailMeta: {
     flexDirection: "row",
@@ -425,15 +665,16 @@ const styles = StyleSheet.create({
     color: "#999",
   },
   emptyText: {
-    textAlign: "center",
+    fontSize: 14,
     color: "#999",
-    padding: 20,
+    textAlign: "center",
+    paddingVertical: 20,
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 40,
+    padding: 32,
   },
   errorIcon: {
     fontSize: 48,
@@ -442,7 +683,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#1A1A1A",
+    color: "#333",
     marginBottom: 8,
   },
   errorText: {

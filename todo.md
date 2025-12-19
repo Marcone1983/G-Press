@@ -196,3 +196,12 @@
 - [x] Selezione manuale giornalisti con checkbox
 - [ ] Creare gruppi/playlist personalizzate (prossima versione)
 - [x] Categoria automatica dal nome del file CSV importato
+
+
+## Sistema Autopilota Email (PRIORITÀ ALTA)
+- [x] Tracking aperture email con Resend webhook
+- [x] Database eventi email (aperture, click, bounce)
+- [x] Statistiche REALI nel tab Statistiche (non dati finti)
+- [x] Algoritmo auto-timing basato su pattern aperture
+- [x] Follow-up automatico per chi non ha aperto
+- [x] Dashboard con grafici aperture per orario/giorno
