@@ -248,3 +248,6 @@
 - [x] Sistema approvazione con notifica
 - [x] Ranking giornalisti basato su engagement
 - [x] Learning system - impara da aperture/click
+- [x] Follow-up automatico dopo 48h se non apre
+- [x] Invio email reale nel follow-up con Resend
+- [x] Cancellazione follow-up se giornalista apre

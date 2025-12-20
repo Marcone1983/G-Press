@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
+import { scheduleFollowUpsForAll } from "./follow-up.js";
 
 // Email sending configuration
 // For production, integrate with Resend, SendGrid, or AWS SES
@@ -95,10 +96,23 @@ export async function sendPressRelease(
 
     result.success = result.totalSent > 0;
 
+    // Schedule follow-ups for journalists who received the email (48 hours = 2 days)
+    if (result.totalSent > 0) {
+      const distributions = await db.getDistributionsByPressRelease(pressReleaseId);
+      const sentDistributions = distributions
+        .filter(d => d.status === "sent")
+        .map(d => ({ journalistId: d.journalistId, distributionId: d.id }));
+      
+      if (sentDistributions.length > 0) {
+        await scheduleFollowUpsForAll(pressReleaseId, sentDistributions, 2); // 48 hours = 2 days
+        console.log(`[Email] Scheduled ${sentDistributions.length} follow-ups for 48 hours from now`);
+      }
+    }
+
     // Notify owner about the distribution
     await notifyOwner({
       title: "Press Release Distributed",
-      content: `"${pressRelease.title}" sent to ${result.totalSent} journalists. ${result.totalFailed} failed.`,
+      content: `"${pressRelease.title}" sent to ${result.totalSent} journalists. ${result.totalFailed} failed. Follow-ups scheduled for 48h.`,
     });
 
     return result;

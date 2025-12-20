@@ -3,75 +3,74 @@
 ## 🚨 PRIORITÀ CRITICA - AUTOPILOTA AUTONOMO
 
 ### 1. Sistema Autopilota Completamente Autonomo
-- [ ] **Cron Job ogni ora** - Controllo automatico trend senza intervento utente
-- [ ] **Trend Detection** - API per rilevare trend del momento (Google Trends, News API, social)
-- [ ] **Generazione automatica articoli** - Basata sui trend rilevati, NON su input utente
-- [ ] **Sistema di approvazione** - Notifica push/email al proprietario per approvare prima dell'invio
-- [ ] **Invio automatico dopo approvazione** - 1286 email/giorno per 7 giorni = 9000 giornalisti
-- [ ] **Dashboard autopilota** - Mostra stato, trend rilevati, articoli in attesa approvazione
+- [x] **Cron Job ogni ora** - Controllo automatico trend (server/autopilot-system.ts)
+- [x] **Trend Detection** - API per rilevare trend (server/trend-detection.ts)
+- [x] **Generazione automatica articoli** - Basata sui trend + Knowledge Base
+- [x] **Sistema di approvazione** - Notifica push/email al proprietario
+- [x] **Invio automatico dopo approvazione** - 1286 email/giorno
+- [x] **Dashboard autopilota** - Pannello nella Home con statistiche
 
 ### 2. Sistema Multi-Agente AI (3 Agenti)
-- [ ] **Agente Ricercatore** - Cerca trend, raccoglie dati, analizza fonti dalla Knowledge Base
-- [ ] **Agente Writer** - Scrive articolo basato sui dati del Ricercatore
-- [ ] **Agente Capo Redazione** - Controlla qualità, identifica punti deboli, suggerisce miglioramenti
-- [ ] **Orchestrazione automatica** - I 3 agenti devono collaborare senza intervento umano
-- [ ] **Pipeline completa** - Ricercatore → Writer → Capo Redazione → Approvazione utente → Invio
+- [x] **Agente Ricercatore** - Cerca trend, raccoglie dati dalla Knowledge Base
+- [x] **Agente Writer** - Scrive articolo basato sui dati del Ricercatore
+- [x] **Agente Capo Redazione** - Controlla qualità, identifica punti deboli
+- [x] **Orchestrazione automatica** - I 3 agenti collaborano automaticamente
+- [x] **Pipeline completa** - Ricercatore → Writer → Capo Redazione → Approvazione → Invio
 
 ### 3. Ranking Giornalisti
-- [ ] **Score engagement** - Calcolo basato su aperture, click, risposte
-- [ ] **Priorità invio** - I giornalisti con score alto ricevono email prima
-- [ ] **Aggiornamento automatico** - Score si aggiorna dopo ogni campagna
-- [ ] **Visualizzazione ranking** - Lista giornalisti ordinata per engagement
-- [ ] **Segmentazione intelligente** - Gruppi A/B/C basati su performance
+- [x] **Score engagement** - Calcolo basato su aperture, click, risposte
+- [x] **Priorità invio** - I giornalisti con score alto ricevono email prima
+- [x] **Aggiornamento automatico** - Score si aggiorna dopo ogni campagna
+- [x] **Visualizzazione ranking** - Lista nel tab Statistiche (Tier A/B/C)
+- [x] **Segmentazione intelligente** - Gruppi A/B/C basati su performance
 
 ### 4. Learning e Miglioramento Continuo
-- [ ] **Apprendimento giornaliero** - Analisi aperture, click, bounce ogni giorno
-- [ ] **Orari ottimali per paese** - Impara quando inviare per ogni timezone
-- [ ] **Ottimizzazione subject** - Impara quali oggetti funzionano meglio
-- [ ] **Ottimizzazione contenuto** - Impara quali stili/toni generano più engagement
-- [ ] **Report settimanale** - Statistiche di miglioramento nel tempo
+- [x] **Apprendimento giornaliero** - Analisi aperture, click, bounce (server/learning-system.ts)
+- [x] **Orari ottimali per paese** - Impara quando inviare per ogni timezone
+- [x] **Ottimizzazione subject** - Impara quali oggetti funzionano meglio
+- [x] **Ottimizzazione contenuto** - Impara quali stili/toni generano più engagement
+- [x] **Report settimanale** - Statistiche di miglioramento nel tempo
 
 ### 5. Trend Detection e Contenuti
-- [ ] **Integrazione Google Trends** - Rilevamento trend in tempo reale
-- [ ] **Analisi News API** - Cosa sta succedendo nel settore
-- [ ] **Utilizzo Knowledge Base** - Articoli basati SOLO su documenti caricati, non inventati
-- [ ] **Fact-checking automatico** - Verifica fatti prima di generare articolo
-- [ ] **Personalizzazione per categoria** - Trend diversi per Crypto, Tech, Finance, etc.
+- [x] **Integrazione Google Trends** - Rilevamento trend in tempo reale
+- [x] **Analisi News API** - Cosa sta succedendo nel settore
+- [x] **Utilizzo Knowledge Base** - Articoli basati SOLO su documenti caricati
+- [x] **Fact-checking automatico** - Verifica fatti prima di generare articolo
+- [x] **Personalizzazione per categoria** - Trend diversi per Crypto, Tech, Finance, etc.
+
+### 6. Follow-Up Automatico
+- [x] **Scheduling follow-up** - Programmato automaticamente dopo invio (48h)
+- [x] **Invio email reale** - Follow-up inviati con Resend API
+- [x] **Cancellazione su apertura** - Se giornalista apre, follow-up cancellato
+- [x] **Template follow-up** - Email personalizzate per ogni follow-up
 
 ---
 
 ## 📊 STATO ATTUALE
 
-| Feature | Stato | Note |
+| Feature | Stato | File |
 |---------|-------|------|
-| Autopilota Autonomo | ❌ MANCANTE | Solo bottone manuale che appare dopo input utente |
-| Multi-Agente AI | ⚠️ PARZIALE | Codice esiste ma non integrato nel flusso automatico |
-| Ranking Giornalisti | ❌ MANCANTE | Non implementato |
-| Learning | ⚠️ PARZIALE | Tracking eventi esiste, ma non learning |
-| Trend Detection | ❌ MANCANTE | Non implementato |
-| Invio Email | ✅ FATTO | Funziona con Resend API |
-| Knowledge Base | ✅ FATTO | Caricamento documenti funziona |
+| Autopilota Autonomo | ✅ FATTO | server/autopilot-system.ts |
+| Multi-Agente AI | ✅ FATTO | server/ai-agents.ts |
+| Ranking Giornalisti | ✅ FATTO | server/routers.ts (autonomousAutopilot.ranking) |
+| Learning | ✅ FATTO | server/learning-system.ts |
+| Trend Detection | ✅ FATTO | server/trend-detection.ts |
+| Invio Email | ✅ FATTO | server/email.ts |
+| Follow-Up 48h | ✅ FATTO | server/follow-up.ts |
+| Knowledge Base | ✅ FATTO | server/ai-agents.ts |
 
 ---
 
-## 🎯 ORDINE DI IMPLEMENTAZIONE
+## 🎯 FILE IMPLEMENTATI
 
-1. **Trend Detection API** - Base per tutto il resto
-2. **Cron Job Autopilota** - Controllo automatico ogni ora
-3. **Pipeline Multi-Agente** - Ricercatore → Writer → Editor
-4. **Sistema Approvazione** - Notifica + UI per approvare
-5. **Ranking Giornalisti** - Score e priorità
-6. **Learning System** - Miglioramento continuo
+1. **server/trend-detection.ts** - Rileva trend da Google Trends, News API, social
+2. **server/autopilot-system.ts** - Sistema autopilota completo con cron job
+3. **server/ai-agents.ts** - 3 agenti AI (Ricercatore, Writer, Capo Redazione)
+4. **server/learning-system.ts** - Apprendimento continuo da statistiche
+5. **server/follow-up.ts** - Follow-up automatico dopo 48h
+6. **server/email.ts** - Invio email con Resend + scheduling follow-up
+7. **server/routers.ts** - Tutti gli endpoint API
 
 ---
 
-## ⏱️ STIMA TEMPO
-
-- Trend Detection: 2-3 ore
-- Cron Job + Autopilota: 2-3 ore
-- Multi-Agente Pipeline: 3-4 ore
-- Sistema Approvazione: 2 ore
-- Ranking Giornalisti: 2 ore
-- Learning System: 3-4 ore
-
-**TOTALE: ~15-18 ore di sviluppo**
+## ✅ COMPLETATO AL 100%

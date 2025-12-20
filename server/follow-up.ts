@@ -3,6 +3,110 @@ import { getDb } from "./db.js";
 import { followUpQueue, distributions, pressReleases, journalists } from "../drizzle/schema.js";
 
 /**
+ * Build HTML content for follow-up email
+ */
+function buildFollowUpEmail(
+  pressRelease: any,
+  journalist: any,
+  followUpNumber: number
+): string {
+  const greeting = journalist.name ? `Gentile ${journalist.name},` : "Gentile Redazione,";
+  
+  const followUpMessages = [
+    "Le scrivo per verificare se ha avuto modo di leggere il nostro comunicato stampa.",
+    "Volevo assicurarmi che il nostro comunicato stampa non fosse sfuggito alla sua attenzione.",
+    "Un gentile promemoria riguardo al nostro comunicato stampa inviato alcuni giorni fa.",
+  ];
+  
+  const message = followUpMessages[Math.min(followUpNumber - 1, followUpMessages.length - 1)];
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    h1 { color: #1E88E5; font-size: 22px; margin-bottom: 10px; }
+    .intro { margin-bottom: 20px; color: #555; }
+    .content { margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #1E88E5; }
+    .cta { margin: 25px 0; }
+    .cta a { display: inline-block; padding: 12px 24px; background: #1E88E5; color: white; text-decoration: none; border-radius: 6px; }
+    .footer { margin-top: 30px; font-size: 12px; color: #999; }
+    .signature { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <p>${greeting}</p>
+  
+  <p class="intro">${message}</p>
+  
+  <div class="content">
+    <h1>${pressRelease.title}</h1>
+    <p>${pressRelease.content?.substring(0, 300)}${pressRelease.content?.length > 300 ? '...' : ''}</p>
+  </div>
+  
+  <p>Restiamo a disposizione per ulteriori informazioni, interviste o materiale aggiuntivo.</p>
+  
+  <div class="signature">
+    <p>Cordiali saluti,</p>
+    <p><strong>Roberto Romagnino</strong><br>
+    Founder & CEO<br>
+    GROWVERSE, LLC</p>
+  </div>
+  
+  <div class="footer">
+    <p>Questo è un promemoria automatico inviato tramite G-Press.</p>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+// Email sending function
+async function sendFollowUpEmail(options: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<boolean> {
+  const resendApiKey = process.env.RESEND_API_KEY;
+  
+  if (!resendApiKey) {
+    console.log(`[Follow-up] No API key, simulating send to ${options.to}`);
+    return true;
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM || "Roberto Romagnino <g.ceo@growverse.net>",
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+    
+    if (response.ok) {
+      console.log(`[Follow-up] Email sent to ${options.to}`);
+      return true;
+    } else {
+      const error = await response.text();
+      console.error(`[Follow-up] Failed to send to ${options.to}:`, error);
+      return false;
+    }
+  } catch (error) {
+    console.error(`[Follow-up] Error sending to ${options.to}:`, error);
+    return false;
+  }
+}
+
+/**
  * Schedule follow-ups for a press release distribution
  * Called after initial email send
  */
@@ -105,9 +209,28 @@ export async function processPendingFollowUps() {
       continue;
     }
 
-    // For now, just mark as sent (actual email sending would require more integration)
-    // In production, you would call the email service here
+    // Send actual follow-up email
     try {
+      // Build follow-up email content
+      const followUpSubject = `[Promemoria] ${item.pressRelease.title}`;
+      const followUpHtml = buildFollowUpEmail(item.pressRelease, item.journalist, item.followUp.followUpNumber);
+      
+      // Send the email
+      const emailSent = await sendFollowUpEmail({
+        to: item.journalist.email,
+        subject: followUpSubject,
+        html: followUpHtml,
+      });
+
+      if (!emailSent) {
+        // Mark as skipped if email failed
+        await db
+          .update(followUpQueue)
+          .set({ status: "skipped" })
+          .where(eq(followUpQueue.id, item.followUp.id));
+        continue;
+      }
+
       // Mark as sent
       await db
         .update(followUpQueue)
@@ -118,7 +241,7 @@ export async function processPendingFollowUps() {
         .where(eq(followUpQueue.id, item.followUp.id));
       
       sent++;
-      console.log(`[Follow-up] Sent follow-up to ${item.journalist.email}`);
+      console.log(`[Follow-up] Sent follow-up #${item.followUp.followUpNumber} to ${item.journalist.email}`);
     } catch (error) {
       console.error(`[Follow-up] Error processing follow-up for ${item.journalist.email}:`, error);
       
