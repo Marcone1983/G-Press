@@ -266,3 +266,23 @@
 
 ## NUOVE FEATURE RICHIESTE
 - [x] Sistema cache articoli di successo - memorizza articoli con alto engagement per riutilizzarli
+
+
+## BUG CRITICO - DATI NON PERSISTENTI (RISOLTO)
+- [x] Knowledge Base si cancella quando reinstalli APK - MIGRATO A D1
+- [x] Storico email inviate si cancella - MIGRATO A D1
+- [x] Fine-tuning Q&A si cancella - MIGRATO A D1
+- [x] CSV caricati si cancellano - MIGRATO A D1
+- [x] SOLUZIONE: Migrare tutto su Cloudflare D1 (persistente cloud)
+
+## MIGRAZIONE CLOUDFLARE D1 (COMPLETATA)
+- [x] Creare tabelle D1: knowledge_documents, custom_journalists, templates
+- [x] Creare tabelle D1: training_examples, followup_sequences, app_settings
+- [x] Creare tabelle D1: press_releases, email_tracking, journalist_rankings
+- [x] Implementare servizio cloudflare-d1.ts con tutte le operazioni CRUD
+- [x] Creare API endpoints REST per D1 (/api/d1/[...path].ts)
+- [x] Creare hook React use-d1-storage.ts per accesso frontend
+- [x] Migrare knowledge.tsx da AsyncStorage a D1
+- [x] Migrare ai-tools.tsx da AsyncStorage a D1
+- [x] Migrare index.tsx da AsyncStorage a D1
+- [x] Sincronizzazione automatica con fallback locale

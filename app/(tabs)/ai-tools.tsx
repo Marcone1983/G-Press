@@ -12,7 +12,7 @@ import {
   FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTrainingExamples, useKnowledgeBase } from '@/hooks/use-d1-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import {
@@ -30,11 +30,9 @@ import {
   type FineTuningJob,
 } from '@/lib/vercel-api';
 
-const STORAGE_KEYS = {
-  DOCUMENTS: 'gpress_kb_documents',
-  TRAINING_EXAMPLES: 'gpress_training_examples',
-  SELECTED_MODEL: 'gpress_selected_model',
-};
+// Storage keys per fallback locale
+const SELECTED_MODEL_KEY = 'gpress_selected_model';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface StoredDocument extends Document {
   id: string;
@@ -92,23 +90,58 @@ export default function AIToolsScreen() {
 
   const loadData = async () => {
     try {
-      const [docsJson, examplesJson, modelJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS),
-        AsyncStorage.getItem(STORAGE_KEYS.TRAINING_EXAMPLES),
-        AsyncStorage.getItem(STORAGE_KEYS.SELECTED_MODEL),
-      ]);
-      
-      if (docsJson) setDocuments(JSON.parse(docsJson));
-      if (examplesJson) setTrainingExamples(JSON.parse(examplesJson));
+      // Carica modello selezionato da locale (non critico)
+      const modelJson = await AsyncStorage.getItem(SELECTED_MODEL_KEY);
       if (modelJson) setSelectedModel(modelJson);
+      
+      // I documenti e training examples vengono caricati da D1 tramite hooks
     } catch (error) {
       console.error('Error loading data:', error);
     }
   };
 
+  // Hook per training examples da D1
+  const { 
+    examples: d1TrainingExamples, 
+    save: saveD1Example, 
+    delete: deleteD1Example,
+    loading: trainingLoading 
+  } = useTrainingExamples();
+  
+  // Hook per documenti da D1
+  const { 
+    documents: d1Documents, 
+    loading: docsLoading 
+  } = useKnowledgeBase();
+  
+  // Sincronizza state locale con D1
+  useEffect(() => {
+    if (d1TrainingExamples.length > 0) {
+      setTrainingExamples(d1TrainingExamples.map(e => ({
+        id: String(e.id),
+        prompt: e.prompt,
+        completion: e.completion,
+        createdAt: e.created_at,
+      })));
+    }
+  }, [d1TrainingExamples]);
+  
+  useEffect(() => {
+    if (d1Documents.length > 0) {
+      setDocuments(d1Documents.map(d => ({
+        id: String(d.id),
+        name: d.title,
+        category: d.category || 'general',
+        content: d.content,
+        uploadedAt: d.created_at,
+      })));
+    }
+  }, [d1Documents]);
+
   const saveTrainingExamples = async (examples: TrainingExample[]) => {
     setTrainingExamples(examples);
-    await AsyncStorage.setItem(STORAGE_KEYS.TRAINING_EXAMPLES, JSON.stringify(examples));
+    // Salva anche localmente come backup
+    await AsyncStorage.setItem('gpress_training_examples_backup', JSON.stringify(examples));
   };
 
   // ============================================
@@ -280,21 +313,30 @@ export default function AIToolsScreen() {
       return;
     }
 
-    const newExample: TrainingExample = {
-      id: Date.now().toString(),
-      prompt: newPrompt,
-      completion: newCompletion,
-      createdAt: new Date().toISOString(),
-    };
-
-    await saveTrainingExamples([...trainingExamples, newExample]);
-    setNewPrompt('');
-    setNewCompletion('');
-    Alert.alert('Successo', 'Esempio aggiunto!');
+    try {
+      // Salva su D1 (persistente)
+      await saveD1Example({
+        prompt: newPrompt,
+        completion: newCompletion,
+        category: 'general',
+      });
+      
+      setNewPrompt('');
+      setNewCompletion('');
+      Alert.alert('Successo', 'Esempio salvato su cloud!');
+    } catch (error: any) {
+      Alert.alert('Errore', error.message || 'Impossibile salvare');
+    }
   };
 
   const handleDeleteExample = async (id: string) => {
-    await saveTrainingExamples(trainingExamples.filter(e => e.id !== id));
+    try {
+      // Elimina da D1
+      await deleteD1Example(parseInt(id));
+    } catch (error: any) {
+      // Fallback: elimina solo localmente
+      await saveTrainingExamples(trainingExamples.filter(e => e.id !== id));
+    }
   };
 
   const handlePrepareTraining = async () => {
@@ -706,7 +748,7 @@ export default function AIToolsScreen() {
                     style={[styles.modelOption, selectedModel === model && styles.modelOptionActive]}
                     onPress={async () => {
                       setSelectedModel(model);
-                      await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, model);
+                      await AsyncStorage.setItem(SELECTED_MODEL_KEY, model);
                     }}
                   >
                     <Text style={[styles.modelOptionText, selectedModel === model && styles.modelOptionTextActive]}>

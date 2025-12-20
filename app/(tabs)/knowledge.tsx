@@ -13,13 +13,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useKnowledgeBase, usePressReleases, useAppSettings } from '@/hooks/use-d1-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { generateArticle, checkApiHealth, type Document, type CompanyInfo, type ArticleFormat, type GeneratedArticle } from '@/lib/vercel-api';
 
-const STORAGE_KEYS = {
-  DOCUMENTS: 'gpress_kb_documents',
+// Chiavi per dati locali (company info e articoli draft)
+const LOCAL_KEYS = {
   COMPANY_INFO: 'gpress_kb_company',
   ARTICLES: 'gpress_kb_articles',
 };
@@ -63,9 +64,37 @@ export default function KnowledgeScreen() {
     message: string;
   }>({ step: 'idle', message: '' });
 
+  // Hook per documenti da D1 (persistente)
+  const { 
+    documents: d1Documents, 
+    save: saveD1Document, 
+    delete: deleteD1Document,
+    loading: docsLoading,
+    refresh: refreshDocs 
+  } = useKnowledgeBase();
+  
+  // Hook per press releases da D1
+  const { save: savePressRelease } = usePressReleases();
+  
+  // Hook per settings da D1 (company info)
+  const { get: getSetting, set: setSetting } = useAppSettings();
+  
+  // Sincronizza documenti da D1
+  useEffect(() => {
+    if (d1Documents.length > 0) {
+      setDocuments(d1Documents.map(d => ({
+        id: String(d.id),
+        name: d.title,
+        category: d.category || 'general',
+        content: d.content,
+        uploadedAt: d.created_at,
+      })));
+    }
+  }, [d1Documents]);
+
   // Load data on mount
   useEffect(() => {
-    loadData();
+    loadLocalData();
     checkHealth();
   }, []);
 
@@ -74,35 +103,41 @@ export default function KnowledgeScreen() {
     setIsApiHealthy(healthy);
   };
 
-  const loadData = async () => {
+  const loadLocalData = async () => {
     try {
-      const [docsJson, companyJson, articlesJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS),
-        AsyncStorage.getItem(STORAGE_KEYS.COMPANY_INFO),
-        AsyncStorage.getItem(STORAGE_KEYS.ARTICLES),
+      // Carica solo dati locali (company info e articoli draft)
+      const [companyJson, articlesJson] = await Promise.all([
+        AsyncStorage.getItem(LOCAL_KEYS.COMPANY_INFO),
+        AsyncStorage.getItem(LOCAL_KEYS.ARTICLES),
       ]);
       
-      if (docsJson) setDocuments(JSON.parse(docsJson));
       if (companyJson) setCompanyInfo(JSON.parse(companyJson));
       if (articlesJson) setArticles(JSON.parse(articlesJson));
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading local data:', error);
     }
   };
 
   const saveDocuments = async (docs: StoredDocument[]) => {
     setDocuments(docs);
-    await AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
+    // Backup locale
+    await AsyncStorage.setItem('gpress_kb_documents_backup', JSON.stringify(docs));
   };
 
   const saveCompanyInfo = async (info: CompanyInfo) => {
     setCompanyInfo(info);
-    await AsyncStorage.setItem(STORAGE_KEYS.COMPANY_INFO, JSON.stringify(info));
+    await AsyncStorage.setItem(LOCAL_KEYS.COMPANY_INFO, JSON.stringify(info));
+    // Salva anche su D1 per persistenza
+    try {
+      await setSetting('company_info', JSON.stringify(info));
+    } catch (e) {
+      console.log('D1 save failed, using local storage');
+    }
   };
 
   const saveArticles = async (arts: StoredArticle[]) => {
     setArticles(arts);
-    await AsyncStorage.setItem(STORAGE_KEYS.ARTICLES, JSON.stringify(arts));
+    await AsyncStorage.setItem(LOCAL_KEYS.ARTICLES, JSON.stringify(arts));
   };
 
   const handleUploadDocument = async () => {
@@ -125,16 +160,27 @@ export default function KnowledgeScreen() {
         content = `[File: ${file.name}] - Content extraction requires manual input`;
       }
 
-      const newDoc: StoredDocument = {
-        id: Date.now().toString(),
-        name: file.name,
-        category: 'general',
-        content: content.substring(0, 10000), // Limit content size
-        uploadedAt: new Date().toISOString(),
-      };
-
-      await saveDocuments([...documents, newDoc]);
-      Alert.alert('Successo', 'Documento caricato!');
+      // Salva su D1 (persistente)
+      try {
+        await saveD1Document({
+          title: file.name,
+          content: content.substring(0, 10000),
+          type: 'document',
+          category: 'general',
+        });
+        Alert.alert('Successo', 'Documento salvato su cloud!');
+      } catch (e) {
+        // Fallback locale
+        const newDoc: StoredDocument = {
+          id: Date.now().toString(),
+          name: file.name,
+          category: 'general',
+          content: content.substring(0, 10000),
+          uploadedAt: new Date().toISOString(),
+        };
+        await saveDocuments([...documents, newDoc]);
+        Alert.alert('Successo', 'Documento salvato localmente');
+      }
     } catch (error) {
       console.error('Error uploading document:', error);
       Alert.alert('Errore', 'Impossibile caricare il documento');
@@ -151,14 +197,25 @@ export default function KnowledgeScreen() {
           text: 'Aggiungi',
           onPress: async (content: string | undefined) => {
             if (!content) return;
-            const newDoc: StoredDocument = {
-              id: Date.now().toString(),
-              name: `Documento ${documents.length + 1}`,
-              category: 'manual',
-              content,
-              uploadedAt: new Date().toISOString(),
-            };
-            await saveDocuments([...documents, newDoc]);
+            // Salva su D1
+            try {
+              await saveD1Document({
+                title: `Documento ${documents.length + 1}`,
+                content,
+                type: 'manual',
+                category: 'manual',
+              });
+            } catch (e) {
+              // Fallback locale
+              const newDoc: StoredDocument = {
+                id: Date.now().toString(),
+                name: `Documento ${documents.length + 1}`,
+                category: 'manual',
+                content,
+                uploadedAt: new Date().toISOString(),
+              };
+              await saveDocuments([...documents, newDoc]);
+            }
           },
         },
       ],
@@ -173,7 +230,13 @@ export default function KnowledgeScreen() {
         text: 'Elimina',
         style: 'destructive',
         onPress: async () => {
-          await saveDocuments(documents.filter(d => d.id !== id));
+          try {
+            // Elimina da D1
+            await deleteD1Document(parseInt(id));
+          } catch (e) {
+            // Fallback: elimina solo localmente
+            await saveDocuments(documents.filter(d => d.id !== id));
+          }
         },
       },
     ]);
