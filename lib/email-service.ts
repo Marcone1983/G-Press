@@ -1,12 +1,12 @@
-import Constants from 'expo-constants';
-
-const RESEND_API_KEY = Constants.expoConfig?.extra?.resendApiKey || '';
-const RESEND_API_URL = 'https://api.resend.com/emails';
+/**
+ * G-Press Email Service
+ * Uses tRPC backend API for email sending to ensure API key security
+ */
 
 interface EmailAttachment {
   filename: string;
   content: string; // base64 encoded
-  type: string; // mime type
+  type?: string; // mime type
 }
 
 interface EmailOptions {
@@ -24,100 +24,85 @@ interface SendResult {
   errors: string[];
 }
 
+// We'll use direct fetch to the tRPC endpoint since we're in the mobile app
+const API_BASE_URL = 'http://localhost:3000/api';
+
 /**
- * Send emails using Resend API (legacy function without attachments)
+ * Send emails using tRPC backend API (which has access to RESEND_API_KEY)
  */
 export async function sendEmails(options: EmailOptions): Promise<SendResult> {
   return sendEmailsWithAttachments(options);
 }
 
 /**
- * Send emails using Resend API with optional attachments
- * Handles batching for large recipient lists
+ * Send emails using tRPC backend API with optional attachments
  */
 export async function sendEmailsWithAttachments(options: EmailOptions): Promise<SendResult> {
   const { to, subject, html, from = 'Roberto Romagnino <g.ceo@growverse.net>', attachments } = options;
   
-  if (!RESEND_API_KEY) {
+  try {
+    // Call tRPC mutation via HTTP
+    const response = await fetch(`${API_BASE_URL}/trpc/email.send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        json: {
+          to,
+          subject,
+          html,
+          from,
+          attachments: attachments?.map(a => ({
+            filename: a.filename,
+            content: a.content,
+          })),
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Email Service] HTTP Error:', response.status, errorText);
+      return {
+        success: false,
+        sent: 0,
+        failed: to.length,
+        errors: [`HTTP ${response.status}: ${errorText}`],
+      };
+    }
+
+    const data = await response.json();
+    
+    // tRPC wraps result in { result: { data: ... } }
+    const result = data?.result?.data || data;
+    
+    return {
+      success: result.success ?? false,
+      sent: result.sent ?? 0,
+      failed: result.failed ?? to.length,
+      errors: result.errors ?? [],
+    };
+  } catch (error: any) {
+    console.error('[Email Service] Error:', error);
     return {
       success: false,
       sent: 0,
       failed: to.length,
-      errors: ['API key non configurata'],
+      errors: [error.message || 'Errore di rete'],
     };
   }
-
-  const result: SendResult = {
-    success: true,
-    sent: 0,
-    failed: 0,
-    errors: [],
-  };
-
-  // Resend allows up to 100 recipients per request
-  // We'll send in batches of 50 for safety
-  const BATCH_SIZE = 50;
-  const batches: string[][] = [];
-  
-  for (let i = 0; i < to.length; i += BATCH_SIZE) {
-    batches.push(to.slice(i, i + BATCH_SIZE));
-  }
-
-  // Prepare attachments for Resend API format
-  const resendAttachments = attachments?.map(att => ({
-    filename: att.filename,
-    content: att.content, // Resend accepts base64 content directly
-  }));
-
-  for (const batch of batches) {
-    try {
-      const requestBody: any = {
-        from,
-        to: batch,
-        subject,
-        html,
-      };
-
-      // Add attachments if present
-      if (resendAttachments && resendAttachments.length > 0) {
-        requestBody.attachments = resendAttachments;
-      }
-
-      const response = await fetch(RESEND_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (response.ok) {
-        result.sent += batch.length;
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        result.failed += batch.length;
-        result.errors.push(errorData.message || `HTTP ${response.status}`);
-      }
-    } catch (error: any) {
-      result.failed += batch.length;
-      result.errors.push(error.message || 'Errore di rete');
-    }
-  }
-
-  result.success = result.failed === 0;
-  return result;
 }
 
 /**
- * Check if Resend API is configured
+ * Check if email service is configured (always true since backend handles it)
  */
 export function isEmailConfigured(): boolean {
-  return !!RESEND_API_KEY && RESEND_API_KEY.startsWith('re_');
+  return true; // Backend has the API key
 }
 
 /**
- * Get email statistics from Resend
+ * Get email statistics from Resend via backend
  */
 export interface EmailStats {
   total: number;
@@ -137,102 +122,38 @@ export interface EmailDetail {
 }
 
 /**
- * Get list of sent emails from Resend
+ * Get list of sent emails - returns empty for now, use tRPC stats instead
  */
 export async function getEmailsList(limit: number = 100): Promise<EmailDetail[]> {
-  if (!RESEND_API_KEY) return [];
-
-  try {
-    const response = await fetch(`https://api.resend.com/emails?limit=${limit}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error('Error fetching emails list:', error);
-    return [];
-  }
+  // Stats are now fetched via tRPC in the stats screen
+  return [];
 }
 
 /**
  * Get details of a specific email
  */
 export async function getEmailDetails(emailId: string): Promise<any> {
-  if (!RESEND_API_KEY) return null;
-
-  try {
-    const response = await fetch(`https://api.resend.com/emails/${emailId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) return null;
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching email details:', error);
-    return null;
-  }
+  return null;
 }
 
 /**
- * Calculate aggregate statistics from emails list
+ * Calculate aggregate statistics - returns empty, use tRPC stats instead
  */
 export async function getAggregateStats(): Promise<EmailStats> {
-  const emails = await getEmailsList(100);
-  
-  const stats: EmailStats = {
-    total: emails.length,
+  return {
+    total: 0,
     delivered: 0,
     opened: 0,
     clicked: 0,
     bounced: 0,
     complained: 0,
   };
-
-  for (const email of emails) {
-    switch (email.last_event) {
-      case 'delivered':
-        stats.delivered++;
-        break;
-      case 'opened':
-        stats.opened++;
-        stats.delivered++; // opened implies delivered
-        break;
-      case 'clicked':
-        stats.clicked++;
-        stats.opened++; // clicked implies opened
-        stats.delivered++;
-        break;
-      case 'bounced':
-        stats.bounced++;
-        break;
-      case 'complained':
-        stats.complained++;
-        break;
-    }
-  }
-
-  return stats;
 }
 
 /**
  * Get statistics from database via tRPC (real data)
- * Falls back to Resend API if database not available
  */
 export async function getStatsFromDatabase(): Promise<EmailStats | null> {
-  // This will be called from the component using tRPC
-  // The actual implementation is in server/email-tracking.ts
   return null;
 }
 

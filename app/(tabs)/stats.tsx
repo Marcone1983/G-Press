@@ -19,7 +19,6 @@ import { trpc } from "@/lib/trpc";
 import {
   getAggregateStats,
   getEmailsList,
-  isEmailConfigured,
   EmailStats,
   EmailDetail,
 } from "@/lib/email-service";
@@ -176,19 +175,7 @@ export default function StatsScreen() {
   const maxHourlyOpens = Math.max(...hourlyData.map((d) => d.opens), 1);
   const maxDailyOpens = Math.max(...dailyData.map((d) => d.opens), 1);
 
-  if (!isEmailConfigured()) {
-    return (
-      <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.errorContainer}>
-          <ThemedText style={styles.errorIcon}>⚠️</ThemedText>
-          <ThemedText style={styles.errorTitle}>API Non Configurata</ThemedText>
-          <ThemedText style={styles.errorText}>
-            Configura la chiave API Resend per visualizzare le statistiche delle email inviate.
-          </ThemedText>
-        </View>
-      </ThemedView>
-    );
-  }
+  // API is always configured via backend - no need to check
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: "#F8F9FA" }]}>

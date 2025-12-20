@@ -4,7 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
-import { sendPressRelease } from "./email";
+import { sendPressRelease, sendBulkEmails } from "./email";
 import { generateArticle, optimizeSubject } from "./ai";
 import * as emailTracking from "./email-tracking";
 import * as followUp from "./follow-up";
@@ -321,6 +321,28 @@ export const appRouter = router({
     bestSendTimes: protectedProcedure.query(({ ctx }) => 
       emailTracking.getBestSendTimes(ctx.user.id)
     ),
+  }),
+
+  // ============================================
+  // EMAIL DIRECT SEND API
+  // ============================================
+  email: router({
+    // Send emails directly (used by mobile app)
+    send: publicProcedure
+      .input(z.object({
+        to: z.array(z.string().email()),
+        subject: z.string(),
+        html: z.string(),
+        from: z.string().optional(),
+        attachments: z.array(z.object({
+          filename: z.string(),
+          content: z.string(),
+        })).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await sendBulkEmails(input);
+        return result;
+      }),
   }),
 
   // ============================================

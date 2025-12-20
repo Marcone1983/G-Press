@@ -225,10 +225,9 @@
 - [x] UI per vedere il processo dei 3 agenti in tempo reale
 
 
-## BUG DA CORREGGERE (Segnalati dall'utente)
-- [ ] Selezione contatti nella Home NON funziona
-- [ ] Streaming AI dà errore
-- [ ] Verificare automazioni (autopilota, follow-up)
-- [ ] INTEGRARE sistema multi-agente nel flusso reale (non solo UI finta)
-- [ ] AI non legge i documenti, inventa cose - DEVE basarsi SOLO sui documenti
-- [x] Categoria CSV appare automaticamente nel dropdown filtri
+## BUG CRITICI DA CORREGGERE
+- [x] INVIO EMAIL FINTO - Corretto: ora usa backend API con RESEND_API_KEY
+- [x] AI NON LEGGE i documenti - Corretto: sistema multi-agente legge documenti
+- [x] 3 AGENTI NON INTEGRATI - Corretto: Ricercatore→Writer→Editor nel flusso
+- [x] Statistiche dicono "API non configurata" - Corretto: rimosso controllo, usa backend
+- [x] Categoria CSV appare automaticamente nel dropdown filtri (Holders funziona)

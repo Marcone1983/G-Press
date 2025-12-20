@@ -24,7 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { sendEmailsWithAttachments, isEmailConfigured, formatPressReleaseEmail } from "@/lib/email-service";
+import { sendEmailsWithAttachments, formatPressReleaseEmail } from "@/lib/email-service";
 import { trpc } from "@/lib/trpc";
 
 // Import static JSON data
@@ -425,18 +425,7 @@ export default function HomeScreen() {
                 imageCount: imageCount,
               });
 
-              // Check if Resend API is configured
-              if (!isEmailConfigured()) {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                Alert.alert(
-                  "❌ Errore Configurazione",
-                  "API Resend non configurata.\n\nContatta l'amministratore per configurare la chiave API.",
-                  [{ text: "OK" }]
-                );
-                return;
-              }
-
-              // Use Resend API for automatic sending
+              // Send via backend API (which has RESEND_API_KEY configured)
               const htmlContent = formatPressReleaseEmail({
                 title: title.trim(),
                 subtitle: subtitle.trim(),
