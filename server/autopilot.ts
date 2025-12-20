@@ -1,5 +1,5 @@
 import { eq, and, sql, notInArray, desc, asc } from "drizzle-orm";
-import { getDb } from "./db";
+import { getDb } from "./db.js";
 import { 
   pressReleases, 
   journalists, 
@@ -7,7 +7,7 @@ import {
   sendPatterns,
   autopilotCampaigns,
   emailEvents
-} from "../drizzle/schema";
+} from "../drizzle/schema.js";
 
 const DEFAULT_DAILY_BATCH = 1286; // 9000 / 7
 

@@ -231,3 +231,7 @@
 - [x] 3 AGENTI NON INTEGRATI - Corretto: Ricercatore→Writer→Editor nel flusso
 - [x] Statistiche dicono "API non configurata" - Corretto: rimosso controllo, usa backend
 - [x] Categoria CSV appare automaticamente nel dropdown filtri (Holders funziona)
+
+
+## BUG VERCEL DEPLOY
+- [x] Errori TypeScript import extensions (.js mancante) nei file API

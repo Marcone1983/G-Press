@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import * as db from "./db";
-import { sendPressRelease, sendBulkEmails } from "./email";
-import { generateArticle, optimizeSubject } from "./ai";
-import * as emailTracking from "./email-tracking";
-import * as followUp from "./follow-up";
-import * as autopilot from "./autopilot";
-import * as aiAgents from "./ai-agents";
+import { getSessionCookieOptions } from "./_core/cookies.js";
+import { systemRouter } from "./_core/systemRouter.js";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc.js";
+import * as db from "./db.js";
+import { sendPressRelease, sendBulkEmails } from "./email.js";
+import { generateArticle, optimizeSubject } from "./ai.js";
+import * as emailTracking from "./email-tracking.js";
+import * as followUp from "./follow-up.js";
+import * as autopilot from "./autopilot.js";
+import * as aiAgents from "./ai-agents.js";
 
 export const appRouter = router({
   system: systemRouter,

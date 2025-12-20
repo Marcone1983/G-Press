@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
     } = req.body;
 
     // Import database functions dynamically to avoid bundling issues
-    const { saveEmailEvent, updateDistributionFromEvent, updateAnalytics, cancelFollowUpsForOpened } = await import("../../server/email-tracking");
+    const { saveEmailEvent, updateDistributionFromEvent, updateAnalytics, cancelFollowUpsForOpened } = await import("../../server/email-tracking.js");
 
     // Save the event
     await saveEmailEvent({

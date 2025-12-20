@@ -1,6 +1,6 @@
 import { eq, and, sql } from "drizzle-orm";
-import { getDb } from "./db";
-import { emailEvents, emailAnalytics, distributions, followUpQueue, InsertEmailEvent } from "../drizzle/schema";
+import { getDb } from "./db.js";
+import { emailEvents, emailAnalytics, distributions, followUpQueue, InsertEmailEvent } from "../drizzle/schema.js";
 
 /**
  * Save an email event from Resend webhook

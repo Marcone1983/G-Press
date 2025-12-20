@@ -1,6 +1,6 @@
 import { eq, and, sql, lt } from "drizzle-orm";
-import { getDb } from "./db";
-import { followUpQueue, distributions, pressReleases, journalists } from "../drizzle/schema";
+import { getDb } from "./db.js";
+import { followUpQueue, distributions, pressReleases, journalists } from "../drizzle/schema.js";
 
 /**
  * Schedule follow-ups for a press release distribution

@@ -1,5 +1,5 @@
-import * as db from "./db";
-import { notifyOwner } from "./_core/notification";
+import * as db from "./db.js";
+import { notifyOwner } from "./_core/notification.js";
 
 // Email sending configuration
 // For production, integrate with Resend, SendGrid, or AWS SES
