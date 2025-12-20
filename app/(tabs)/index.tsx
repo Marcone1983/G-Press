@@ -62,7 +62,7 @@ interface SelectedImage {
   mimeType: string;
 }
 
-const CATEGORIES = [
+const BASE_CATEGORIES = [
   { label: "Tutte le categorie", value: "all" },
   { label: "Tecnologia", value: "technology" },
   { label: "Business", value: "business" },
@@ -298,6 +298,21 @@ export default function HomeScreen() {
   const allJournalists = useMemo(() => {
     return [...customJournalists, ...journalists];
   }, [journalists, customJournalists]);
+  
+  // Dynamic categories from custom journalists
+  const CATEGORIES = useMemo(() => {
+    const customCategories = new Set<string>();
+    customJournalists.forEach(j => {
+      if (j.category && !BASE_CATEGORIES.some(c => c.value === j.category)) {
+        customCategories.add(j.category);
+      }
+    });
+    const dynamicCats = Array.from(customCategories).map(cat => ({
+      label: `📁 ${cat.charAt(0).toUpperCase() + cat.slice(1)}`,
+      value: cat,
+    }));
+    return [...BASE_CATEGORIES, ...dynamicCats];
+  }, [customJournalists]);
 
   const filteredJournalists = useMemo(() => {
     let filtered = allJournalists;

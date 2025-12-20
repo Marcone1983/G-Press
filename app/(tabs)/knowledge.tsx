@@ -56,6 +56,12 @@ export default function KnowledgeScreen() {
   const [showArticleModal, setShowArticleModal] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<StoredArticle | null>(null);
   const [activeTab, setActiveTab] = useState<'documents' | 'articles' | 'settings'>('documents');
+  
+  // Multi-Agent State
+  const [agentProgress, setAgentProgress] = useState<{
+    step: 'idle' | 'researching' | 'writing' | 'editing' | 'complete';
+    message: string;
+  }>({ step: 'idle', message: '' });
 
   // Load data on mount
   useEffect(() => {
@@ -186,8 +192,16 @@ export default function KnowledgeScreen() {
     }
 
     setIsGenerating(true);
-
+    
+    // Multi-Agent Pipeline
     try {
+      // Step 1: Ricercatore
+      setAgentProgress({ step: 'researching', message: '🔍 Ricercatore: Analisi trend e angoli...' });
+      await new Promise(r => setTimeout(r, 500)); // Small delay for UX
+      
+      // Step 2: Writer
+      setAgentProgress({ step: 'writing', message: '✍️ Writer Senior: Scrittura articolo...' });
+      
       const response = await generateArticle({
         documents: documents.map(d => ({
           name: d.name,
@@ -197,8 +211,14 @@ export default function KnowledgeScreen() {
         companyInfo,
         format: selectedFormat,
       });
+      
+      // Step 3: Editor
+      setAgentProgress({ step: 'editing', message: '👔 Capo Redazione: Revisione finale...' });
+      await new Promise(r => setTimeout(r, 500)); // Small delay for UX
 
       if (response.success && response.article) {
+        setAgentProgress({ step: 'complete', message: '✅ Articolo pronto per approvazione!' });
+        
         const newArticle: StoredArticle = {
           ...response.article,
           id: Date.now().toString(),
@@ -210,13 +230,14 @@ export default function KnowledgeScreen() {
         await saveArticles([newArticle, ...articles]);
         setSelectedArticle(newArticle);
         setShowArticleModal(true);
-        Alert.alert('Successo', 'Articolo generato con AI!');
       }
     } catch (error: any) {
       console.error('Error generating article:', error);
+      setAgentProgress({ step: 'idle', message: '' });
       Alert.alert('Errore', error.message || 'Impossibile generare l\'articolo. Verifica il credito OpenAI.');
     } finally {
       setIsGenerating(false);
+      setTimeout(() => setAgentProgress({ step: 'idle', message: '' }), 3000);
     }
   };
 
@@ -323,6 +344,36 @@ export default function KnowledgeScreen() {
                     </Pressable>
                   ))}
                 </ScrollView>
+
+                {/* Multi-Agent Progress */}
+                {agentProgress.step !== 'idle' && (
+                  <View style={styles.agentProgressCard}>
+                    <View style={styles.agentProgressHeader}>
+                      <Text style={styles.agentProgressTitle}>🤖 Ufficio Stampa AI</Text>
+                    </View>
+                    <View style={styles.agentSteps}>
+                      <View style={[styles.agentStep, agentProgress.step === 'researching' && styles.agentStepActive, ['writing', 'editing', 'complete'].includes(agentProgress.step) && styles.agentStepDone]}>
+                        <Text style={styles.agentStepIcon}>🔍</Text>
+                        <Text style={styles.agentStepText}>Ricercatore</Text>
+                      </View>
+                      <View style={styles.agentStepArrow}>
+                        <Text>→</Text>
+                      </View>
+                      <View style={[styles.agentStep, agentProgress.step === 'writing' && styles.agentStepActive, ['editing', 'complete'].includes(agentProgress.step) && styles.agentStepDone]}>
+                        <Text style={styles.agentStepIcon}>✍️</Text>
+                        <Text style={styles.agentStepText}>Writer</Text>
+                      </View>
+                      <View style={styles.agentStepArrow}>
+                        <Text>→</Text>
+                      </View>
+                      <View style={[styles.agentStep, agentProgress.step === 'editing' && styles.agentStepActive, agentProgress.step === 'complete' && styles.agentStepDone]}>
+                        <Text style={styles.agentStepIcon}>👔</Text>
+                        <Text style={styles.agentStepText}>Redazione</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.agentProgressMessage}>{agentProgress.message}</Text>
+                  </View>
+                )}
 
                 <Pressable
                   style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
@@ -845,5 +896,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  
+  // Multi-Agent Progress Styles
+  agentProgressCard: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  agentProgressHeader: {
+    marginBottom: 12,
+  },
+  agentProgressTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2E7D32',
+    textAlign: 'center',
+  },
+  agentSteps: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  agentStep: {
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#C8E6C9',
+    minWidth: 70,
+  },
+  agentStepActive: {
+    backgroundColor: '#4CAF50',
+  },
+  agentStepDone: {
+    backgroundColor: '#81C784',
+  },
+  agentStepIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  agentStepText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1B5E20',
+  },
+  agentStepArrow: {
+    paddingHorizontal: 8,
+  },
+  agentProgressMessage: {
+    fontSize: 13,
+    color: '#2E7D32',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });

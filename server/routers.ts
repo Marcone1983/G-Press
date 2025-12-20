@@ -9,6 +9,7 @@ import { generateArticle, optimizeSubject } from "./ai";
 import * as emailTracking from "./email-tracking";
 import * as followUp from "./follow-up";
 import * as autopilot from "./autopilot";
+import * as aiAgents from "./ai-agents";
 
 export const appRouter = router({
   system: systemRouter,
@@ -393,6 +394,40 @@ export const appRouter = router({
       // This will be called by cron, processes all active autopilot campaigns
       return { processed: true, timestamp: new Date().toISOString() };
     }),
+  }),
+
+  // ============================================
+  // MULTI-AGENT AI API
+  // ============================================
+  multiAgent: router({
+    // Run full pipeline: Researcher -> Writer -> Editor
+    generateArticle: protectedProcedure
+      .input(z.object({ documents: z.string() }))
+      .mutation(async ({ input }) => {
+        const result = await aiAgents.runMultiAgentPipeline(input.documents);
+        return result;
+      }),
+
+    // Run only researcher
+    research: protectedProcedure
+      .input(z.object({ documents: z.string() }))
+      .mutation(async ({ input }) => {
+        return aiAgents.runResearcher(input.documents);
+      }),
+
+    // Run only writer (needs research first)
+    write: protectedProcedure
+      .input(z.object({ documents: z.string(), research: z.any() }))
+      .mutation(async ({ input }) => {
+        return aiAgents.runWriter(input.documents, input.research);
+      }),
+
+    // Run only editor (needs draft first)
+    edit: protectedProcedure
+      .input(z.object({ documents: z.string(), draft: z.any() }))
+      .mutation(async ({ input }) => {
+        return aiAgents.runEditor(input.documents, input.draft);
+      }),
   }),
 });
 

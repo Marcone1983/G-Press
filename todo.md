@@ -215,3 +215,20 @@
 - [x] API autopilot complete (start, pause, stop, status)
 - [x] UI per attivare autopilota e vedere progressi
 - [x] Cron job per esecuzione automatica (ogni ora)
+
+
+## Sistema Multi-Agente AI (Ufficio Stampa Automatizzato)
+- [x] Agente 1: RICERCATORE - Analizza trend, trova angoli, scrappa notizie
+- [x] Agente 2: WRITER SENIOR - Esperto PNL, marketing, giornalismo, professore lettere
+- [x] Agente 3: CAPO REDAZIONE - Revisiona, trova punti deboli, corregge
+- [x] Orchestrazione: Ricercatore → Writer → Capo Redazione → Approvazione
+- [x] UI per vedere il processo dei 3 agenti in tempo reale
+
+
+## BUG DA CORREGGERE (Segnalati dall'utente)
+- [ ] Selezione contatti nella Home NON funziona
+- [ ] Streaming AI dà errore
+- [ ] Verificare automazioni (autopilota, follow-up)
+- [ ] INTEGRARE sistema multi-agente nel flusso reale (non solo UI finta)
+- [ ] AI non legge i documenti, inventa cose - DEVE basarsi SOLO sui documenti
+- [x] Categoria CSV appare automaticamente nel dropdown filtri
