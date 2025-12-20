@@ -131,6 +131,13 @@ export default function HomeScreen() {
   const startAutopilot = trpc.autopilot.start.useMutation();
   const stopAutopilot = trpc.autopilot.stop.useMutation();
   
+  // Autonomous Autopilot (GROWVERSE)
+  const autonomousStatus = trpc.autonomousAutopilot.getStatus.useQuery(undefined, { refetchInterval: 30000 });
+  const setAutonomousActive = trpc.autonomousAutopilot.setActive.useMutation();
+  const approveArticle = trpc.autonomousAutopilot.approveArticle.useMutation();
+  const rejectArticle = trpc.autonomousAutopilot.rejectArticle.useMutation();
+  const trendAnalysis = trpc.trends.detect.useQuery(undefined, { enabled: false, retry: false });
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const tintColor = useThemeColor({}, "tint");
@@ -576,40 +583,124 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* Start Autopilot Button (when not active) */}
-        {!autopilotStatus.data?.active && title.trim() && content.trim() && (
-          <Pressable 
-            style={styles.startAutopilotBtn}
-            onPress={() => {
-              Alert.alert(
-                "🤖 Avvia Autopilota",
-                `Vuoi avviare l'invio automatico a ${totalCount.toLocaleString()} giornalisti?\n\nL'AI invierà ~1.286 email al giorno, ottimizzando gli orari per ogni paese.\n\nDurata stimata: 7 giorni`,
-                [
-                  { text: "Annulla", style: "cancel" },
-                  { 
-                    text: "Avvia", 
-                    onPress: async () => {
-                      // TODO: Save press release first, then start autopilot
-                      Alert.alert("Prossimamente", "Funzione in arrivo nel prossimo aggiornamento");
-                    }
-                  }
-                ]
-              );
-            }}
+        {/* AUTONOMOUS AUTOPILOT PANEL - Always visible */}
+        <View style={styles.autonomousPanel}>
+          <LinearGradient
+            colors={autonomousStatus.data?.active ? ["#1565C0", "#1976D2"] : ["#424242", "#616161"]}
+            style={styles.autonomousPanelGradient}
           >
-            <LinearGradient
-              colors={["#1565C0", "#1976D2"]}
-              style={styles.startAutopilotGradient}
-            >
-              <ThemedText style={styles.startAutopilotText}>
-                🤖 Avvia Autopilota Intelligente
+            <View style={styles.autonomousHeader}>
+              <ThemedText style={styles.autonomousTitle}>
+                🤖 Autopilota Autonomo GROWVERSE
               </ThemedText>
-              <ThemedText style={styles.startAutopilotSubtext}>
-                Invia a tutti in 7 giorni con AI
+              <Pressable
+                style={[
+                  styles.autonomousToggle,
+                  autonomousStatus.data?.active && styles.autonomousToggleActive
+                ]}
+                onPress={() => {
+                  const newActive = !autonomousStatus.data?.active;
+                  setAutonomousActive.mutate({ active: newActive }, {
+                    onSuccess: () => {
+                      Haptics.notificationAsync(
+                        newActive 
+                          ? Haptics.NotificationFeedbackType.Success 
+                          : Haptics.NotificationFeedbackType.Warning
+                      );
+                    }
+                  });
+                }}
+              >
+                <ThemedText style={styles.autonomousToggleText}>
+                  {autonomousStatus.data?.active ? "ON" : "OFF"}
+                </ThemedText>
+              </Pressable>
+            </View>
+            
+            <ThemedText style={styles.autonomousDescription}>
+              {autonomousStatus.data?.active 
+                ? "✅ Monitora trend ogni ora e genera articoli automaticamente"
+                : "⚠️ Attiva per monitorare trend e generare articoli su GROWVERSE"}
+            </ThemedText>
+            
+            {/* Stats */}
+            <View style={styles.autonomousStats}>
+              <View style={styles.autonomousStat}>
+                <ThemedText style={styles.autonomousStatNumber}>
+                  {autonomousStatus.data?.stats?.trendsChecked || 0}
+                </ThemedText>
+                <ThemedText style={styles.autonomousStatLabel}>Trend Analizzati</ThemedText>
+              </View>
+              <View style={styles.autonomousStat}>
+                <ThemedText style={styles.autonomousStatNumber}>
+                  {autonomousStatus.data?.stats?.articlesGenerated || 0}
+                </ThemedText>
+                <ThemedText style={styles.autonomousStatLabel}>Articoli Generati</ThemedText>
+              </View>
+              <View style={styles.autonomousStat}>
+                <ThemedText style={styles.autonomousStatNumber}>
+                  {autonomousStatus.data?.stats?.articlesSent || 0}
+                </ThemedText>
+                <ThemedText style={styles.autonomousStatLabel}>Articoli Inviati</ThemedText>
+              </View>
+            </View>
+            
+            {/* Pending Approval */}
+            {autonomousStatus.data?.pendingApproval && (
+              <View style={styles.pendingApproval}>
+                <ThemedText style={styles.pendingTitle}>
+                  📝 Articolo in Attesa di Approvazione
+                </ThemedText>
+                <ThemedText style={styles.pendingArticleTitle}>
+                  {autonomousStatus.data.pendingApproval.title}
+                </ThemedText>
+                <ThemedText style={styles.pendingTrend}>
+                  Trend: {autonomousStatus.data.pendingApproval.trend?.title}
+                </ThemedText>
+                <View style={styles.pendingActions}>
+                  <Pressable
+                    style={styles.approveBtn}
+                    onPress={() => {
+                      approveArticle.mutate(
+                        { articleId: autonomousStatus.data!.pendingApproval!.id },
+                        {
+                          onSuccess: () => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            Alert.alert("✅ Approvato", "L'articolo verrà inviato ai giornalisti");
+                          }
+                        }
+                      );
+                    }}
+                  >
+                    <ThemedText style={styles.approveBtnText}>✅ Approva</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={styles.rejectBtn}
+                    onPress={() => {
+                      rejectArticle.mutate(
+                        { articleId: autonomousStatus.data!.pendingApproval!.id },
+                        {
+                          onSuccess: () => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                          }
+                        }
+                      );
+                    }}
+                  >
+                    <ThemedText style={styles.rejectBtnText}>❌ Rifiuta</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+            
+            {/* Last Check */}
+            {autonomousStatus.data?.lastCheck && (
+              <ThemedText style={styles.lastCheck}>
+                Ultimo controllo: {new Date(autonomousStatus.data.lastCheck).toLocaleString("it-IT")}
               </ThemedText>
-            </LinearGradient>
-          </Pressable>
-        )}
+            )}
+          </LinearGradient>
+        </View>
 
         {/* Filters Card */}
         <View style={styles.card}>
@@ -1606,5 +1697,130 @@ const styles = StyleSheet.create({
   startAutopilotSubtext: {
     fontSize: 13,
     color: "rgba(255,255,255,0.8)",
+  },
+  
+  // Autonomous Autopilot Panel
+  autonomousPanel: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  autonomousPanelGradient: {
+    padding: 20,
+  },
+  autonomousHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  autonomousTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    flex: 1,
+  },
+  autonomousToggle: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  autonomousToggleActive: {
+    backgroundColor: "#4CAF50",
+  },
+  autonomousToggleText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  autonomousDescription: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  autonomousStats: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "rgba(0,0,0,0.15)",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  autonomousStat: {
+    alignItems: "center",
+  },
+  autonomousStatNumber: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  autonomousStatLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 4,
+    textTransform: "uppercase",
+  },
+  pendingApproval: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  pendingTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1565C0",
+    marginBottom: 8,
+  },
+  pendingArticleTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  pendingTrend: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+  },
+  pendingActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  approveBtn: {
+    flex: 1,
+    backgroundColor: "#4CAF50",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  approveBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  rejectBtn: {
+    flex: 1,
+    backgroundColor: "#F44336",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  rejectBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  lastCheck: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
   },
 });

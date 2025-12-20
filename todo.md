@@ -235,3 +235,16 @@
 
 ## BUG VERCEL DEPLOY
 - [x] Errori TypeScript import extensions (.js mancante) nei file API
+
+## BUG URGENTE
+- [x] Tasto automazione AI sparito - RIPRISTINATO come pannello Autopilota Autonomo GROWVERSE
+
+## AUTOPILOTA AUTONOMO GROWVERSE (NUOVO)
+- [x] Pannello sempre visibile nella Home (non serve scrivere titolo)
+- [x] Toggle ON/OFF per attivare/disattivare
+- [x] Trend Detection API - monitora news ogni ora
+- [x] Trova trend collegabili a GROWVERSE
+- [x] Genera articoli SOLO da Knowledge Base (zero invenzioni)
+- [x] Sistema approvazione con notifica
+- [x] Ranking giornalisti basato su engagement
+- [x] Learning system - impara da aperture/click

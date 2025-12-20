@@ -34,7 +34,14 @@ export default function StatsScreen() {
   const [bestTimes, setBestTimes] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
   const [dailyData, setDailyData] = useState<any[]>([]);
+  const [showRanking, setShowRanking] = useState(false);
   const insets = useSafeAreaInsets();
+  
+  // Journalist ranking query
+  const rankingQuery = trpc.ranking.getAll.useQuery(undefined, {
+    enabled: false,
+    retry: false,
+  });
 
   // tRPC queries for database stats
   const statsQuery = trpc.stats.overview.useQuery(undefined, {
@@ -366,6 +373,72 @@ export default function StatsScreen() {
               </View>
             )}
 
+            {/* Journalist Ranking */}
+            <Pressable 
+              style={styles.card}
+              onPress={() => {
+                setShowRanking(!showRanking);
+                if (!showRanking) rankingQuery.refetch();
+              }}
+            >
+              <View style={styles.cardTitleRow}>
+                <ThemedText style={styles.cardTitle}>🏆 Ranking Giornalisti</ThemedText>
+                <ThemedText style={styles.expandIcon}>{showRanking ? "▲" : "▼"}</ThemedText>
+              </View>
+              <ThemedText style={styles.cardSubtitle}>
+                Classifica basata su aperture e click
+              </ThemedText>
+              
+              {showRanking && (
+                <View style={styles.rankingList}>
+                  {rankingQuery.isLoading ? (
+                    <ActivityIndicator size="small" color="#2E7D32" />
+                  ) : rankingQuery.data && rankingQuery.data.length > 0 ? (
+                    rankingQuery.data.slice(0, 20).map((journalist: any, index: number) => (
+                      <View key={journalist.id} style={styles.rankingItem}>
+                        <View style={[
+                          styles.rankBadge,
+                          journalist.tier === "A" && styles.tierA,
+                          journalist.tier === "B" && styles.tierB,
+                          journalist.tier === "C" && styles.tierC,
+                        ]}>
+                          <ThemedText style={styles.rankBadgeText}>#{index + 1}</ThemedText>
+                        </View>
+                        <View style={styles.rankingInfo}>
+                          <ThemedText style={styles.rankingName} numberOfLines={1}>
+                            {journalist.name || journalist.email}
+                          </ThemedText>
+                          <ThemedText style={styles.rankingEmail} numberOfLines={1}>
+                            {journalist.email}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.rankingStats}>
+                          <ThemedText style={styles.rankingScore}>
+                            {journalist.score.toFixed(1)}
+                          </ThemedText>
+                          <ThemedText style={styles.rankingRate}>
+                            {journalist.openRate.toFixed(0)}% open
+                          </ThemedText>
+                        </View>
+                        <View style={[
+                          styles.tierBadge,
+                          journalist.tier === "A" && styles.tierBadgeA,
+                          journalist.tier === "B" && styles.tierBadgeB,
+                          journalist.tier === "C" && styles.tierBadgeC,
+                        ]}>
+                          <ThemedText style={styles.tierBadgeText}>{journalist.tier}</ThemedText>
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <ThemedText style={styles.emptyText}>
+                      Il ranking verrà calcolato dopo l'invio delle prime email
+                    </ThemedText>
+                  )}
+                </View>
+              )}
+            </Pressable>
+
             {/* Recent Emails */}
             <View style={styles.card}>
               <ThemedText style={styles.cardTitle}>📬 Email Recenti</ThemedText>
@@ -678,5 +751,98 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 22,
+  },
+  
+  // Ranking styles
+  cardTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  expandIcon: {
+    fontSize: 14,
+    color: "#666",
+  },
+  rankingList: {
+    marginTop: 16,
+  },
+  rankingItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E0E0E0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  rankBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#666",
+  },
+  tierA: {
+    backgroundColor: "#FFD700",
+  },
+  tierB: {
+    backgroundColor: "#C0C0C0",
+  },
+  tierC: {
+    backgroundColor: "#CD7F32",
+  },
+  rankingInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  rankingName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  rankingEmail: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
+  },
+  rankingStats: {
+    alignItems: "flex-end",
+    marginRight: 12,
+  },
+  rankingScore: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2E7D32",
+  },
+  rankingRate: {
+    fontSize: 11,
+    color: "#666",
+  },
+  tierBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E0E0E0",
+  },
+  tierBadgeA: {
+    backgroundColor: "#4CAF50",
+  },
+  tierBadgeB: {
+    backgroundColor: "#2196F3",
+  },
+  tierBadgeC: {
+    backgroundColor: "#FF9800",
+  },
+  tierBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

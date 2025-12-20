@@ -10,6 +10,8 @@ import * as emailTracking from "./email-tracking.js";
 import * as followUp from "./follow-up.js";
 import * as autopilot from "./autopilot.js";
 import * as aiAgents from "./ai-agents.js";
+import * as autopilotSystem from "./autopilot-system.js";
+import * as trendDetection from "./trend-detection.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -449,6 +451,90 @@ export const appRouter = router({
       .input(z.object({ documents: z.string(), draft: z.any() }))
       .mutation(async ({ input }) => {
         return aiAgents.runEditor(input.documents, input.draft);
+      }),
+  }),
+
+  // ============================================
+  // AUTONOMOUS AUTOPILOT SYSTEM
+  // Sistema completamente autonomo per GROWVERSE
+  // ============================================
+  autonomousAutopilot: router({
+    // Esegui ciclo autopilota (chiamato ogni ora dal cron)
+    runCycle: publicProcedure.mutation(async () => {
+      return autopilotSystem.runAutopilotCycle();
+    }),
+
+    // Ottieni stato autopilota
+    getStatus: publicProcedure.query(() => {
+      return autopilotSystem.getAutopilotStatus();
+    }),
+
+    // Attiva/disattiva autopilota
+    setActive: protectedProcedure
+      .input(z.object({ active: z.boolean() }))
+      .mutation(({ input }) => {
+        autopilotSystem.setAutopilotActive(input.active);
+        return { success: true, active: input.active };
+      }),
+
+    // Approva articolo generato
+    approveArticle: protectedProcedure
+      .input(z.object({ articleId: z.string() }))
+      .mutation(({ input }) => {
+        return autopilotSystem.approveAutopilotArticle(input.articleId);
+      }),
+
+    // Rifiuta articolo generato
+    rejectArticle: protectedProcedure
+      .input(z.object({ articleId: z.string(), reason: z.string().optional() }))
+      .mutation(({ input }) => {
+        return autopilotSystem.rejectAutopilotArticle(input.articleId, input.reason);
+      }),
+
+    // Analizza e impara dai risultati
+    analyzeAndLearn: protectedProcedure.query(async () => {
+      return autopilotSystem.analyzeAndLearn();
+    }),
+  }),
+
+  // ============================================
+  // TREND DETECTION
+  // ============================================
+  trends: router({
+    // Rileva trend attuali
+    detect: publicProcedure.query(async () => {
+      return trendDetection.detectTrends();
+    }),
+
+    // Controlla se generare articolo
+    shouldGenerate: publicProcedure.query(async () => {
+      const analysis = await trendDetection.detectTrends();
+      return trendDetection.shouldGenerateArticle(analysis);
+    }),
+  }),
+
+  // ============================================
+  // JOURNALIST RANKING
+  // ============================================
+  ranking: router({
+    // Ottieni ranking completo
+    getAll: protectedProcedure.query(async () => {
+      return autopilotSystem.calculateJournalistRankings();
+    }),
+
+    // Ottieni top giornalisti per campagna
+    getTopForCampaign: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+        category: z.string().optional(),
+        country: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        return autopilotSystem.getTopJournalistsForCampaign(
+          input.limit,
+          input.category,
+          input.country
+        );
       }),
   }),
 });
