@@ -322,3 +322,8 @@
 - Ranking Giornalisti - IMPLEMENTATO
 - Import CSV - IMPLEMENTATO
 - Database 9001 Giornalisti - PRESENTE
+
+
+## UI BACKUP E PUSH GITHUB
+- [x] Creare schermata Settings con backup/restore
+- [x] Push su GitHub repository (commit 0ec254a)
