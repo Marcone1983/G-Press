@@ -262,3 +262,7 @@
 - [x] CONNESSIONE: Sincronizzare Knowledge Base con database server (tabella knowledgeDocuments)
 - [x] CONNESSIONE: Persistere stato autopilota in database (tabella autopilotState)
 - [x] CONNESSIONE: Implementare logica reale nel cron job autopilot
+
+
+## NUOVE FEATURE RICHIESTE
+- [x] Sistema cache articoli di successo - memorizza articoli con alto engagement per riutilizzarli

@@ -1,0 +1,8 @@
+{
+  "query": "SELECT \n  'journalists' as tabella, COUNT(*) as records FROM journalists\nUNION ALL\nSELECT 'pressReleases', COUNT(*) FROM pressReleases\nUNION ALL\nSELECT 'emailTracking', COUNT(*) FROM emailTracking\nUNION ALL\nSELECT 'sendPatterns', COUNT(*) FROM sendPatterns\nUNION ALL\nSELECT 'followUpQueue', COUNT(*) FROM followUpQueue\nUNION ALL\nSELECT 'knowledgeDocuments', COUNT(*) FROM knowledgeDocuments\nUNION ALL\nSELECT 'autopilotState', COUNT(*) FROM autopilotState\nUNION ALL\nSELECT 'users', COUNT(*) FROM users;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 41n4N27HemuXP7F.8f29a5fc9fa3 --database WuBh8JZ53nVfbC7enoeNam --execute SELECT \n  'journalists' as tabella, COUNT(*) as records FROM journalists\nUNION ALL\nSELECT 'pressReleases', COUNT(*) FROM pressReleases\nUNION ALL\nSELECT 'emailTracking', COUNT(*) FROM emailTracking\nUNION ALL\nSELECT 'sendPatterns', COUNT(*) FROM sendPatterns\nUNION ALL\nSELECT 'followUpQueue', COUNT(*) FROM followUpQueue\nUNION ALL\nSELECT 'knowledgeDocuments', COUNT(*) FROM knowledgeDocuments\nUNION ALL\nSELECT 'autopilotState', COUNT(*) FROM autopilotState\nUNION ALL\nSELECT 'users', COUNT(*) FROM users;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'wubh8jz53nvfbc7enoenam.emailTracking' doesn't exist"
+  ]
+}

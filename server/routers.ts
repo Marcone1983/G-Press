@@ -12,6 +12,7 @@ import * as autopilot from "./autopilot.js";
 import * as aiAgents from "./ai-agents.js";
 import * as autopilotSystem from "./autopilot-system.js";
 import * as trendDetection from "./trend-detection.js";
+import * as articleCache from "./article-cache.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -544,6 +545,47 @@ export const appRouter = router({
           input.country
         );
       }),
+  }),
+
+  // ============================================
+  // ARTICLE CACHE - Articoli di successo
+  // ============================================
+  articleCache: router({
+    // Statistiche cache
+    stats: protectedProcedure.query(async () => {
+      return articleCache.getCacheStats();
+    }),
+
+    // Lista articoli di successo
+    list: protectedProcedure
+      .input(z.object({
+        category: z.string().optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return articleCache.getSuccessfulArticles(
+          input?.category,
+          input?.limit || 10
+        );
+      }),
+
+    // Trova articolo simile per template
+    findSimilar: protectedProcedure
+      .input(z.object({
+        category: z.string(),
+        keywords: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        return articleCache.findSimilarSuccessfulArticle(
+          input.category,
+          input.keywords
+        );
+      }),
+
+    // Aggiorna cache analizzando tutti gli articoli
+    refresh: protectedProcedure.mutation(async ({ ctx }) => {
+      return articleCache.refreshArticleCache(ctx.user.id);
+    }),
   }),
 });
 

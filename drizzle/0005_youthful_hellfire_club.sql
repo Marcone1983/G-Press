@@ -1,0 +1,21 @@
+CREATE TABLE `successfulArticles` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`pressReleaseId` int,
+	`title` varchar(500) NOT NULL,
+	`subtitle` varchar(500),
+	`content` text NOT NULL,
+	`category` enum('technology','business','finance','health','sports','entertainment','politics','lifestyle','general') NOT NULL DEFAULT 'general',
+	`totalSent` int NOT NULL DEFAULT 0,
+	`totalOpened` int NOT NULL DEFAULT 0,
+	`totalClicked` int NOT NULL DEFAULT 0,
+	`openRate` int NOT NULL DEFAULT 0,
+	`clickRate` int NOT NULL DEFAULT 0,
+	`trendKeywords` text,
+	`trendSource` varchar(255),
+	`timesReused` int NOT NULL DEFAULT 0,
+	`lastReusedAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `successfulArticles_id` PRIMARY KEY(`id`)
+);

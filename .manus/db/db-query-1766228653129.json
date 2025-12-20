@@ -1,0 +1,55 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 41n4N27HemuXP7F.8f29a5fc9fa3 --database WuBh8JZ53nVfbC7enoeNam --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "aiArticlesCache"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "autopilotCampaigns"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "autopilotState"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "companyInfo"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "distributions"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "emailAnalytics"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "emailEvents"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "followUpQueue"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "journalists"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "knowledgeDocuments"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "pressReleases"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "sendPatterns"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "templates"
+    },
+    {
+      "Tables_in_WuBh8JZ53nVfbC7enoeNam": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_WuBh8JZ53nVfbC7enoeNam\n__drizzle_migrations\naiArticlesCache\nautopilotCampaigns\nautopilotState\ncompanyInfo\ndistributions\nemailAnalytics\nemailEvents\nfollowUpQueue\njournalists\nknowledgeDocuments\npressReleases\nsendPatterns\ntemplates\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 46
+}

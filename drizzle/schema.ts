@@ -275,3 +275,40 @@ export const autopilotState = mysqlTable("autopilotState", {
 
 export type AutopilotState = typeof autopilotState.$inferSelect;
 export type InsertAutopilotState = typeof autopilotState.$inferInsert;
+
+
+/**
+ * Successful Articles Cache - stores high-performing articles for reuse
+ * When an article has high open/click rates, it gets cached here
+ * The AI can use these as templates to create variations without new API calls
+ */
+export const successfulArticles = mysqlTable("successfulArticles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  pressReleaseId: int("pressReleaseId"), // Original press release if any
+  title: varchar("title", { length: 500 }).notNull(),
+  subtitle: varchar("subtitle", { length: 500 }),
+  content: text("content").notNull(),
+  category: mysqlEnum("category", [
+    "technology", "business", "finance", "health", "sports",
+    "entertainment", "politics", "lifestyle", "general"
+  ]).default("general").notNull(),
+  // Performance metrics
+  totalSent: int("totalSent").default(0).notNull(),
+  totalOpened: int("totalOpened").default(0).notNull(),
+  totalClicked: int("totalClicked").default(0).notNull(),
+  openRate: int("openRate").default(0).notNull(), // Percentage * 100
+  clickRate: int("clickRate").default(0).notNull(), // Percentage * 100
+  // Trend info that made it successful
+  trendKeywords: text("trendKeywords"), // JSON array of keywords
+  trendSource: varchar("trendSource", { length: 255 }),
+  // Reuse tracking
+  timesReused: int("timesReused").default(0).notNull(),
+  lastReusedAt: timestamp("lastReusedAt"),
+  // Metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SuccessfulArticle = typeof successfulArticles.$inferSelect;
+export type InsertSuccessfulArticle = typeof successfulArticles.$inferInsert;
