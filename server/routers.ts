@@ -14,6 +14,7 @@ import * as autopilotSystem from "./autopilot-system.js";
 import * as trendDetection from "./trend-detection.js";
 import * as articleCache from "./article-cache.js";
 import * as d1 from "./cloudflare-d1.js";
+import * as backup from "./backup.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -954,6 +955,33 @@ export const appRouter = router({
         .input(z.object({ limit: z.number().optional() }).optional())
         .query(async ({ input }) => {
           return d1.getEmailTrackingHistory(input?.limit || 100);
+        }),
+    }),
+
+    // ---- BACKUP & RESTORE ----
+    backup: router({
+      create: protectedProcedure.mutation(async () => {
+        return backup.createFullBackup();
+      }),
+      
+      exportJSON: protectedProcedure.query(async () => {
+        return backup.exportBackupAsJSON();
+      }),
+      
+      restore: protectedProcedure
+        .input(z.any())
+        .mutation(async ({ input }) => {
+          const validation = backup.validateBackup(input);
+          if (!validation.valid) {
+            throw new Error(`Invalid backup: ${validation.errors.join(', ')}`);
+          }
+          return backup.restoreFromBackup(input);
+        }),
+      
+      validate: protectedProcedure
+        .input(z.any())
+        .query(({ input }) => {
+          return backup.validateBackup(input);
         }),
     }),
   }),
