@@ -13,6 +13,8 @@ import * as aiAgents from "./ai-agents.js";
 import * as autopilotSystem from "./autopilot-system.js";
 import * as trendDetection from "./trend-detection.js";
 import * as articleCache from "./article-cache.js";
+import * as d1 from "./cloudflare-d1.js";
+import * as backup from "./backup.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -585,6 +587,402 @@ export const appRouter = router({
     // Aggiorna cache analizzando tutti gli articoli
     refresh: protectedProcedure.mutation(async ({ ctx }) => {
       return articleCache.refreshArticleCache(ctx.user.id);
+    }),
+  }),
+
+  // ============================================
+  // CLOUDFLARE D1 - DATABASE PERSISTENTE
+  // Tutti i dati sotto il controllo dell'utente
+  // ============================================
+  cloudflare: router({
+    // Inizializza database (crea tabelle se non esistono)
+    init: protectedProcedure.mutation(async () => {
+      return d1.initializeDatabase();
+    }),
+
+    // ---- KNOWLEDGE BASE ----
+    documents: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllDocuments();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          title: z.string(),
+          content: z.string(),
+          type: z.string().optional(),
+          category: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveDocument(input);
+          return { success: !!id, id };
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteDocument(input.id);
+        }),
+    }),
+
+    // ---- FINE-TUNING Q&A ----
+    qa: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllQA();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          question: z.string(),
+          answer: z.string(),
+          category: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveQA(input);
+          return { success: !!id, id };
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteQA(input.id);
+        }),
+    }),
+
+    // ---- PRESS RELEASES ----
+    pressReleases: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllPressReleases();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          title: z.string(),
+          content: z.string(),
+          subject: z.string().optional(),
+          category: z.string().optional(),
+          recipientsCount: z.number(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.savePressRelease(input);
+          return { success: !!id, id };
+        }),
+    }),
+
+    // ---- EMAIL TRACKING ----
+    tracking: router({
+      stats: protectedProcedure.query(async () => {
+        return d1.getEmailStats();
+      }),
+      
+      track: protectedProcedure
+        .input(z.object({
+          pressReleaseId: z.number().optional(),
+          journalistEmail: z.string(),
+          journalistName: z.string().optional(),
+          eventType: z.string(),
+          eventData: z.any().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.trackEmailEvent(input);
+        }),
+    }),
+
+    // ---- AUTOPILOT STATE ----
+    autopilot: router({
+      status: protectedProcedure.query(async () => {
+        return d1.getAutopilotState();
+      }),
+      
+      update: protectedProcedure
+        .input(z.object({
+          isActive: z.boolean().optional(),
+          trendsAnalyzed: z.number().optional(),
+          articlesGenerated: z.number().optional(),
+          articlesSent: z.number().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.updateAutopilotState(input);
+        }),
+    }),
+
+    // ---- JOURNALIST RANKINGS ----
+    rankings: router({
+      top: protectedProcedure
+        .input(z.object({ limit: z.number().optional() }).optional())
+        .query(async ({ input }) => {
+          return d1.getTopJournalists(input?.limit || 50);
+        }),
+      
+      update: protectedProcedure
+        .input(z.object({
+          email: z.string(),
+          name: z.string().optional(),
+          opens: z.number().optional(),
+          clicks: z.number().optional(),
+          totalSent: z.number().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.updateJournalistRanking(input);
+        }),
+    }),
+
+    // ---- SUCCESSFUL ARTICLES CACHE ----
+    cache: router({
+      list: protectedProcedure
+        .input(z.object({
+          category: z.string().optional(),
+          limit: z.number().optional(),
+        }).optional())
+        .query(async ({ input }) => {
+          return d1.getSuccessfulArticlesFromCache(input?.category, input?.limit || 10);
+        }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          title: z.string(),
+          content: z.string(),
+          subject: z.string().optional(),
+          category: z.string().optional(),
+          openRate: z.number(),
+          clickRate: z.number(),
+          keywords: z.array(z.string()).optional(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.cacheSuccessfulArticle(input);
+        }),
+    }),
+
+    // ---- SEND PATTERNS (LEARNING) ----
+    patterns: router({
+      bestTime: protectedProcedure
+        .input(z.object({
+          country: z.string().optional(),
+          category: z.string().optional(),
+        }).optional())
+        .query(async ({ input }) => {
+          return d1.getBestSendTime(input?.country, input?.category);
+        }),
+      
+      list: protectedProcedure.query(async () => {
+        return d1.getAllSendPatterns();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          country: z.string().optional(),
+          category: z.string().optional(),
+          bestHour: z.number(),
+          bestDay: z.number(),
+          avgOpenRate: z.number(),
+          avgClickRate: z.number(),
+          sampleSize: z.number(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.saveSendPattern(input);
+        }),
+    }),
+
+    // ---- CUSTOM JOURNALISTS ----
+    customJournalists: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllCustomJournalists();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          name: z.string(),
+          email: z.string(),
+          outlet: z.string().optional(),
+          category: z.string().optional(),
+          country: z.string().optional(),
+          isVip: z.boolean().optional(),
+          isBlacklisted: z.boolean().optional(),
+          notes: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveCustomJournalist(input);
+          return { success: !!id, id };
+        }),
+      
+      update: protectedProcedure
+        .input(z.object({
+          id: z.number(),
+          name: z.string().optional(),
+          outlet: z.string().optional(),
+          category: z.string().optional(),
+          country: z.string().optional(),
+          isVip: z.boolean().optional(),
+          isBlacklisted: z.boolean().optional(),
+          notes: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const { id, ...updates } = input;
+          return d1.updateCustomJournalist(id, updates);
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteCustomJournalist(input.id);
+        }),
+    }),
+
+    // ---- EMAIL TEMPLATES ----
+    templates: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllEmailTemplates();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          name: z.string(),
+          subject: z.string().optional(),
+          content: z.string(),
+          isDefault: z.boolean().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveEmailTemplate(input);
+          return { success: !!id, id };
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteEmailTemplate(input.id);
+        }),
+    }),
+
+    // ---- TRAINING EXAMPLES ----
+    trainingExamples: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllTrainingExamples();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          prompt: z.string(),
+          completion: z.string(),
+          category: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveTrainingExample(input);
+          return { success: !!id, id };
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteTrainingExample(input.id);
+        }),
+    }),
+
+    // ---- FOLLOW-UP SEQUENCES ----
+    followups: router({
+      list: protectedProcedure.query(async () => {
+        return d1.getAllFollowupSequences();
+      }),
+      
+      pending: protectedProcedure.query(async () => {
+        return d1.getPendingFollowups();
+      }),
+      
+      save: protectedProcedure
+        .input(z.object({
+          journalistEmail: z.string(),
+          originalSubject: z.string(),
+          originalContent: z.string().optional(),
+          step: z.number().optional(),
+          nextSendAt: z.string().optional(),
+          status: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const id = await d1.saveFollowupSequence(input);
+          return { success: !!id, id };
+        }),
+      
+      update: protectedProcedure
+        .input(z.object({
+          id: z.number(),
+          step: z.number().optional(),
+          nextSendAt: z.string().optional(),
+          status: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const { id, ...updates } = input;
+          return d1.updateFollowupSequence(id, updates);
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          return d1.deleteFollowupSequence(input.id);
+        }),
+      
+      cancelByEmail: protectedProcedure
+        .input(z.object({ email: z.string() }))
+        .mutation(async ({ input }) => {
+          return d1.cancelFollowupByEmail(input.email);
+        }),
+    }),
+
+    // ---- APP SETTINGS ----
+    settings: router({
+      get: protectedProcedure
+        .input(z.object({ key: z.string() }))
+        .query(async ({ input }) => {
+          return d1.getSetting(input.key);
+        }),
+      
+      getAll: protectedProcedure.query(async () => {
+        return d1.getAllSettings();
+      }),
+      
+      set: protectedProcedure
+        .input(z.object({
+          key: z.string(),
+          value: z.string(),
+        }))
+        .mutation(async ({ input }) => {
+          return d1.setSetting(input.key, input.value);
+        }),
+    }),
+
+    // ---- EMAIL TRACKING HISTORY ----
+    trackingHistory: router({
+      list: protectedProcedure
+        .input(z.object({ limit: z.number().optional() }).optional())
+        .query(async ({ input }) => {
+          return d1.getEmailTrackingHistory(input?.limit || 100);
+        }),
+    }),
+
+    // ---- BACKUP & RESTORE ----
+    backup: router({
+      create: protectedProcedure.mutation(async () => {
+        return backup.createFullBackup();
+      }),
+      
+      exportJSON: protectedProcedure.query(async () => {
+        return backup.exportBackupAsJSON();
+      }),
+      
+      restore: protectedProcedure
+        .input(z.any())
+        .mutation(async ({ input }) => {
+          const validation = backup.validateBackup(input);
+          if (!validation.valid) {
+            throw new Error(`Invalid backup: ${validation.errors.join(', ')}`);
+          }
+          return backup.restoreFromBackup(input);
+        }),
+      
+      validate: protectedProcedure
+        .input(z.any())
+        .query(({ input }) => {
+          return backup.validateBackup(input);
+        }),
     }),
   }),
 });

@@ -20,6 +20,7 @@ import { Picker } from "@react-native-picker/picker";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCustomJournalists, usePressReleases, useEmailStats } from "@/hooks/use-d1-storage";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -30,9 +31,10 @@ import { trpc } from "@/lib/trpc";
 // Import static JSON data
 import journalistsData from "@/assets/data/journalists.json";
 
-const STORAGE_KEY = "gpress_custom_journalists";
-const HISTORY_KEY = "gpress_sent_history";
-const TEMPLATES_KEY = "gpress_templates";
+// Chiavi per dati locali (backup)
+const LOCAL_JOURNALISTS_KEY = "gpress_custom_journalists_backup";
+const LOCAL_HISTORY_KEY = "gpress_sent_history_backup";
+const LOCAL_TEMPLATES_KEY = "gpress_templates";
 
 interface Template {
   id: number;
@@ -110,6 +112,36 @@ export default function HomeScreen() {
   const [journalists, setJournalists] = useState<Journalist[]>([]);
   const [customJournalists, setCustomJournalists] = useState<Journalist[]>([]);
   
+  // Hook D1 per giornalisti custom (persistenti)
+  const { 
+    journalists: d1Journalists, 
+    save: saveD1Journalist,
+    delete: deleteD1Journalist,
+    loading: d1Loading 
+  } = useCustomJournalists();
+  
+  // Hook D1 per press releases
+  const { save: savePressReleaseToD1 } = usePressReleases();
+  
+  // Hook D1 per email stats
+  const { track: trackEmailEvent } = useEmailStats();
+  
+  // Sincronizza giornalisti custom da D1
+  useEffect(() => {
+    if (d1Journalists.length > 0) {
+      const mapped = d1Journalists.map((j, index) => ({
+        id: j.id || index + 10000,
+        name: j.name,
+        email: j.email,
+        outlet: j.outlet || '',
+        country: j.country || 'IT',
+        category: j.category || 'general',
+        active: !j.isBlacklisted,
+      }));
+      setCustomJournalists(mapped);
+    }
+  }, [d1Journalists]);
+  
   // Templates state
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
@@ -171,7 +203,7 @@ export default function HomeScreen() {
 
   const loadTemplates = async () => {
     try {
-      const data = await AsyncStorage.getItem(TEMPLATES_KEY);
+      const data = await AsyncStorage.getItem(LOCAL_TEMPLATES_KEY);
       if (data) setTemplates(JSON.parse(data));
     } catch (error) {
       console.error("Error loading templates:", error);
@@ -200,7 +232,7 @@ export default function HomeScreen() {
     };
 
     const updated = [...templates, newTemplate];
-    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(LOCAL_TEMPLATES_KEY, JSON.stringify(updated));
     setTemplates(updated);
     setTemplateName("");
     setShowSaveTemplateModal(false);
@@ -230,7 +262,7 @@ export default function HomeScreen() {
           style: "destructive",
           onPress: async () => {
             const updated = templates.filter(t => t.id !== id);
-            await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+            await AsyncStorage.setItem(LOCAL_TEMPLATES_KEY, JSON.stringify(updated));
             setTemplates(updated);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
@@ -246,7 +278,7 @@ export default function HomeScreen() {
       const staticData = journalistsData as Journalist[];
       
       // Load custom journalists from AsyncStorage
-      const customData = await AsyncStorage.getItem(STORAGE_KEY);
+      const customData = await AsyncStorage.getItem(LOCAL_JOURNALISTS_KEY);
       const custom = customData ? JSON.parse(customData) : [];
       
       setJournalists(staticData);
@@ -372,12 +404,21 @@ export default function HomeScreen() {
 
   const saveToHistory = async (pressRelease: any) => {
     try {
-      const historyData = await AsyncStorage.getItem(HISTORY_KEY);
+      // Salva su D1 (persistente)
+      await savePressReleaseToD1({
+        title: pressRelease.title,
+        content: pressRelease.content,
+        subject: pressRelease.subject || pressRelease.title,
+        category: pressRelease.category,
+        recipients_count: pressRelease.recipientCount || 0,
+      });
+      
+      // Backup locale
+      const historyData = await AsyncStorage.getItem(LOCAL_HISTORY_KEY);
       const history = historyData ? JSON.parse(historyData) : [];
       history.unshift(pressRelease);
-      // Keep only last 50 items
       if (history.length > 50) history.pop();
-      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      await AsyncStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
       console.error("Error saving to history:", error);
     }
