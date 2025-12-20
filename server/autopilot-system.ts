@@ -67,21 +67,36 @@ interface JournalistRanking {
 // KNOWLEDGE BASE - LEGGE SOLO I DOCUMENTI CARICATI
 // ============================================
 
+import { knowledgeDocuments, autopilotState as autopilotStateTable } from "../drizzle/schema.js";
+
 /**
- * Recupera tutti i documenti dalla Knowledge Base locale
+ * Recupera tutti i documenti dalla Knowledge Base dal DATABASE
  * QUESTI SONO GLI UNICI DATI CHE L'AI PUÒ USARE
  */
 async function getKnowledgeBaseDocuments(): Promise<KnowledgeDocument[]> {
-  // I documenti sono salvati in AsyncStorage sul client
-  // Per l'autopilot server-side, li recuperiamo dal database o da un endpoint
+  const db = await getDb();
+  if (!db) {
+    console.error("[Autopilot] Database not available");
+    return [];
+  }
   
-  // TODO: Implementare storage server-side per i documenti
-  // Per ora, ritorna placeholder che indica di caricare documenti
-  
-  console.log("[Autopilot] Fetching Knowledge Base documents...");
-  
-  // In produzione, questo leggerà da un storage persistente
-  return [];
+  try {
+    console.log("[Autopilot] Fetching Knowledge Base documents from database...");
+    
+    const docs = await db.select().from(knowledgeDocuments);
+    
+    console.log(`[Autopilot] Found ${docs.length} documents in Knowledge Base`);
+    
+    return docs.map(doc => ({
+      id: String(doc.id),
+      name: doc.name,
+      content: doc.content,
+      category: doc.category,
+    }));
+  } catch (error) {
+    console.error("[Autopilot] Error fetching Knowledge Base:", error);
+    return [];
+  }
 }
 
 /**
@@ -320,7 +335,8 @@ interface AutopilotStatus {
   };
 }
 
-let autopilotState: AutopilotStatus = {
+// In-memory cache, synced with database
+let autopilotStateCache: AutopilotStatus = {
   active: false,
   lastCheck: null,
   lastArticleGenerated: null,
@@ -333,6 +349,70 @@ let autopilotState: AutopilotStatus = {
   }
 };
 
+// Default user ID for autopilot (owner)
+const AUTOPILOT_USER_ID = 1;
+
+/**
+ * Load autopilot state from database
+ */
+async function loadAutopilotState(): Promise<AutopilotStatus> {
+  const db = await getDb();
+  if (!db) return autopilotStateCache;
+  
+  try {
+    const result = await db.select().from(autopilotStateTable).where(eq(autopilotStateTable.userId, AUTOPILOT_USER_ID)).limit(1);
+    
+    if (result.length > 0) {
+      const state = result[0];
+      autopilotStateCache = {
+        active: state.active,
+        lastCheck: state.lastCheck?.toISOString() || null,
+        lastArticleGenerated: state.lastArticleGenerated?.toISOString() || null,
+        pendingApproval: state.pendingArticleData ? JSON.parse(state.pendingArticleData) : null,
+        stats: {
+          trendsChecked: state.trendsChecked,
+          articlesGenerated: state.articlesGenerated,
+          articlesSent: state.articlesSent,
+          totalEmailsSent: state.totalEmailsSent,
+        }
+      };
+    }
+  } catch (error) {
+    console.error("[Autopilot] Error loading state:", error);
+  }
+  
+  return autopilotStateCache;
+}
+
+/**
+ * Save autopilot state to database
+ */
+async function saveAutopilotState(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  
+  try {
+    const values = {
+      userId: AUTOPILOT_USER_ID,
+      active: autopilotStateCache.active,
+      lastCheck: autopilotStateCache.lastCheck ? new Date(autopilotStateCache.lastCheck) : null,
+      lastArticleGenerated: autopilotStateCache.lastArticleGenerated ? new Date(autopilotStateCache.lastArticleGenerated) : null,
+      trendsChecked: autopilotStateCache.stats.trendsChecked,
+      articlesGenerated: autopilotStateCache.stats.articlesGenerated,
+      articlesSent: autopilotStateCache.stats.articlesSent,
+      totalEmailsSent: autopilotStateCache.stats.totalEmailsSent,
+      pendingArticleId: autopilotStateCache.pendingApproval?.id || null,
+      pendingArticleData: autopilotStateCache.pendingApproval ? JSON.stringify(autopilotStateCache.pendingApproval) : null,
+    };
+    
+    await db.insert(autopilotStateTable).values(values).onDuplicateKeyUpdate({
+      set: values
+    });
+  } catch (error) {
+    console.error("[Autopilot] Error saving state:", error);
+  }
+}
+
 /**
  * MAIN: Ciclo autopilota - chiamato ogni ora
  */
@@ -341,8 +421,8 @@ export async function runAutopilotCycle(): Promise<{
   details: any;
 }> {
   console.log("[Autopilot] Starting cycle...");
-  autopilotState.lastCheck = new Date().toISOString();
-  autopilotState.stats.trendsChecked++;
+  autopilotStateCache.lastCheck = new Date().toISOString();
+  autopilotStateCache.stats.trendsChecked++;
 
   // 1. Rileva trend
   const trendAnalysis = await detectTrends();
@@ -389,8 +469,8 @@ export async function runAutopilotCycle(): Promise<{
     };
   }
 
-  autopilotState.stats.articlesGenerated++;
-  autopilotState.lastArticleGenerated = new Date().toISOString();
+  autopilotStateCache.stats.articlesGenerated++;
+  autopilotStateCache.lastArticleGenerated = new Date().toISOString();
 
   // 5. Salva articolo in attesa di approvazione
   const pendingArticle: AutopilotArticle = {
@@ -403,7 +483,7 @@ export async function runAutopilotCycle(): Promise<{
     createdAt: new Date().toISOString(),
   };
 
-  autopilotState.pendingApproval = pendingArticle;
+  autopilotStateCache.pendingApproval = pendingArticle;
 
   // 6. Notifica owner per approvazione
   await notifyOwner({
@@ -430,11 +510,11 @@ export async function approveAutopilotArticle(articleId: string): Promise<{
   success: boolean;
   message: string;
 }> {
-  if (!autopilotState.pendingApproval || autopilotState.pendingApproval.id !== articleId) {
+  if (!autopilotStateCache.pendingApproval || autopilotStateCache.pendingApproval.id !== articleId) {
     return { success: false, message: "Articolo non trovato" };
   }
 
-  const article = autopilotState.pendingApproval;
+  const article = autopilotStateCache.pendingApproval;
   article.status = "approved";
   article.approvedAt = new Date().toISOString();
 
@@ -454,8 +534,8 @@ export async function approveAutopilotArticle(articleId: string): Promise<{
   // Avvia invio ai giornalisti top-ranked
   // TODO: Implementare invio effettivo
   
-  autopilotState.pendingApproval = null;
-  autopilotState.stats.articlesSent++;
+  autopilotStateCache.pendingApproval = null;
+  autopilotStateCache.stats.articlesSent++;
 
   return { 
     success: true, 
@@ -470,12 +550,12 @@ export async function rejectAutopilotArticle(articleId: string, reason?: string)
   success: boolean;
   message: string;
 }> {
-  if (!autopilotState.pendingApproval || autopilotState.pendingApproval.id !== articleId) {
+  if (!autopilotStateCache.pendingApproval || autopilotStateCache.pendingApproval.id !== articleId) {
     return { success: false, message: "Articolo non trovato" };
   }
 
-  autopilotState.pendingApproval.status = "rejected";
-  autopilotState.pendingApproval = null;
+  autopilotStateCache.pendingApproval.status = "rejected";
+  autopilotStateCache.pendingApproval = null;
 
   return { 
     success: true, 
@@ -486,15 +566,17 @@ export async function rejectAutopilotArticle(articleId: string, reason?: string)
 /**
  * Ottieni lo stato corrente dell'autopilot
  */
-export function getAutopilotStatus(): AutopilotStatus {
-  return { ...autopilotState };
+export async function getAutopilotStatus(): Promise<AutopilotStatus> {
+  await loadAutopilotState(); // Sync from database
+  return { ...autopilotStateCache };
 }
 
 /**
  * Attiva/disattiva l'autopilot
  */
-export function setAutopilotActive(active: boolean): void {
-  autopilotState.active = active;
+export async function setAutopilotActive(active: boolean): Promise<void> {
+  autopilotStateCache.active = active;
+  await saveAutopilotState(); // Persist to database
   console.log(`[Autopilot] ${active ? "Activated" : "Deactivated"}`);
 }
 

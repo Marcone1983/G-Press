@@ -251,3 +251,14 @@
 - [x] Follow-up automatico dopo 48h se non apre
 - [x] Invio email reale nel follow-up con Resend
 - [x] Cancellazione follow-up se giornalista apre
+
+
+## AUDIT ENTERPRISE - FIX CRITICI
+- [x] SICUREZZA: Proteggere endpoint email.send con autenticazione
+- [x] SICUREZZA: Proteggere endpoint autonomousAutopilot.* 
+- [x] SICUREZZA: Proteggere endpoint journalists.list
+- [x] SICUREZZA: Proteggere endpoint trends.*
+- [x] SICUREZZA: Implementare verifica firma webhook Resend (HMAC SHA256)
+- [x] CONNESSIONE: Sincronizzare Knowledge Base con database server (tabella knowledgeDocuments)
+- [x] CONNESSIONE: Persistere stato autopilota in database (tabella autopilotState)
+- [x] CONNESSIONE: Implementare logica reale nel cron job autopilot

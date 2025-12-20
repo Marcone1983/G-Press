@@ -1,5 +1,7 @@
 // Vercel serverless function for Resend webhooks
 
+import crypto from "crypto";
+
 /**
  * Resend Webhook Handler
  * Receives email events (delivered, opened, clicked, bounced, etc.)
@@ -38,13 +40,72 @@ interface ResendWebhookEvent {
   };
 }
 
+/**
+ * Verify Resend webhook signature
+ * @see https://resend.com/docs/dashboard/webhooks/verify-webhook-signature
+ */
+function verifyWebhookSignature(
+  payload: string,
+  signature: string | null,
+  secret: string
+): boolean {
+  if (!signature || !secret) {
+    console.warn("[Resend Webhook] Missing signature or secret");
+    return false;
+  }
+
+  try {
+    // Resend uses HMAC SHA256
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(payload)
+      .digest("hex");
+
+    // Use timing-safe comparison to prevent timing attacks
+    const signatureBuffer = Buffer.from(signature, "hex");
+    const expectedBuffer = Buffer.from(expectedSignature, "hex");
+
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+  } catch (error) {
+    console.error("[Resend Webhook] Signature verification error:", error);
+    return false;
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const event = req.body as ResendWebhookEvent;
+    // Get webhook signing secret
+    const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+    
+    // Get signature from headers
+    const signature = req.headers["resend-signature"] || req.headers["x-resend-signature"];
+    
+    // Get raw body for signature verification
+    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+
+    // Verify signature if secret is configured
+    if (webhookSecret) {
+      const isValid = verifyWebhookSignature(rawBody, signature, webhookSecret);
+      
+      if (!isValid) {
+        console.error("[Resend Webhook] Invalid signature - rejecting request");
+        return res.status(401).json({ error: "Invalid webhook signature" });
+      }
+      
+      console.log("[Resend Webhook] Signature verified successfully");
+    } else {
+      console.warn("[Resend Webhook] RESEND_WEBHOOK_SECRET not configured - skipping signature verification");
+    }
+
+    const event = typeof req.body === "string" ? JSON.parse(req.body) : req.body as ResendWebhookEvent;
     
     console.log("[Resend Webhook] Received event:", event.type);
 

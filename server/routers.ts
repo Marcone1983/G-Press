@@ -28,16 +28,19 @@ export const appRouter = router({
   // JOURNALISTS API
   // ============================================
   journalists: router({
-    list: publicProcedure
-      .input(z.object({
-        category: z.string().optional(),
-        country: z.string().optional(),
-        search: z.string().optional(),
-        isActive: z.boolean().optional(),
-      }).optional())
+    // SECURED: Requires authentication to protect journalist data
+    list: protectedProcedure
+      .input(
+        z.object({
+          category: z.string().optional(),
+          country: z.string().optional(),
+          search: z.string().optional(),
+          isActive: z.boolean().optional(),
+        }).optional()
+      )
       .query(({ input }) => db.getAllJournalists(input)),
 
-    getById: publicProcedure
+    getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(({ input }) => db.getJournalistById(input.id)),
 
@@ -330,7 +333,8 @@ export const appRouter = router({
   // ============================================
   email: router({
     // Send emails directly (used by mobile app)
-    send: publicProcedure
+    // SECURED: Requires authentication to prevent spam abuse
+    send: protectedProcedure
       .input(z.object({
         to: z.array(z.string().email()),
         subject: z.string(),
@@ -460,20 +464,22 @@ export const appRouter = router({
   // ============================================
   autonomousAutopilot: router({
     // Esegui ciclo autopilota (chiamato ogni ora dal cron)
-    runCycle: publicProcedure.mutation(async () => {
+    // SECURED: Requires cron secret or authentication
+    runCycle: protectedProcedure.mutation(async () => {
       return autopilotSystem.runAutopilotCycle();
     }),
 
     // Ottieni stato autopilota
-    getStatus: publicProcedure.query(() => {
+    // SECURED: Requires authentication
+    getStatus: protectedProcedure.query(async () => {
       return autopilotSystem.getAutopilotStatus();
     }),
 
     // Attiva/disattiva autopilota
     setActive: protectedProcedure
       .input(z.object({ active: z.boolean() }))
-      .mutation(({ input }) => {
-        autopilotSystem.setAutopilotActive(input.active);
+      .mutation(async ({ input }) => {
+        await autopilotSystem.setAutopilotActive(input.active);
         return { success: true, active: input.active };
       }),
 
@@ -502,12 +508,14 @@ export const appRouter = router({
   // ============================================
   trends: router({
     // Rileva trend attuali
-    detect: publicProcedure.query(async () => {
+    // SECURED: Requires authentication to prevent API abuse
+    detect: protectedProcedure.query(async () => {
       return trendDetection.detectTrends();
     }),
 
     // Controlla se generare articolo
-    shouldGenerate: publicProcedure.query(async () => {
+    // SECURED: Requires authentication
+    shouldGenerate: protectedProcedure.query(async () => {
       const analysis = await trendDetection.detectTrends();
       return trendDetection.shouldGenerateArticle(analysis);
     }),

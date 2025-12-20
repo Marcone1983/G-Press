@@ -232,3 +232,46 @@ export const autopilotCampaigns = mysqlTable("autopilotCampaigns", {
 
 export type AutopilotCampaign = typeof autopilotCampaigns.$inferSelect;
 export type InsertAutopilotCampaign = typeof autopilotCampaigns.$inferInsert;
+
+
+/**
+ * Knowledge Base documents - server-side storage for AI training documents
+ * These are the ONLY documents the AI can use to generate articles
+ */
+export const knowledgeDocuments = mysqlTable("knowledgeDocuments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).default("general").notNull(),
+  content: text("content").notNull(),
+  fileType: varchar("fileType", { length: 50 }),
+  fileSize: int("fileSize"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type KnowledgeDocument = typeof knowledgeDocuments.$inferSelect;
+export type InsertKnowledgeDocument = typeof knowledgeDocuments.$inferInsert;
+
+/**
+ * Autopilot state - persistent storage for autopilot status
+ * Survives server restarts on Vercel serverless
+ */
+export const autopilotState = mysqlTable("autopilotState", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  active: boolean("active").default(false).notNull(),
+  lastCheck: timestamp("lastCheck"),
+  lastArticleGenerated: timestamp("lastArticleGenerated"),
+  trendsChecked: int("trendsChecked").default(0).notNull(),
+  articlesGenerated: int("articlesGenerated").default(0).notNull(),
+  articlesSent: int("articlesSent").default(0).notNull(),
+  totalEmailsSent: int("totalEmailsSent").default(0).notNull(),
+  pendingArticleId: varchar("pendingArticleId", { length: 100 }),
+  pendingArticleData: text("pendingArticleData"), // JSON stringified
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AutopilotState = typeof autopilotState.$inferSelect;
+export type InsertAutopilotState = typeof autopilotState.$inferInsert;
