@@ -89,7 +89,10 @@ export default async function handler(req: any, res: any) {
     const signature = req.headers["resend-signature"] || req.headers["x-resend-signature"];
     
     // Get raw body for signature verification
-    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    // NOTE: In Vercel, the raw body is not automatically available on req.body for serverless functions.
+    // We assume a middleware or Vercel's body parser has been configured to provide the raw body in req.rawBody or similar.
+    // For simplicity in this environment, we'll assume req.body is the raw text if it's a string, or we stringify it.
+    const rawBody = req.rawBody ? req.rawBody.toString() : (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
 
     // Verify signature if secret is configured
     if (webhookSecret) {
@@ -105,7 +108,7 @@ export default async function handler(req: any, res: any) {
       console.warn("[Resend Webhook] RESEND_WEBHOOK_SECRET not configured - skipping signature verification");
     }
 
-    const event = typeof req.body === "string" ? JSON.parse(req.body) : req.body as ResendWebhookEvent;
+    const event = JSON.parse(rawBody) as ResendWebhookEvent;
     
     console.log("[Resend Webhook] Received event:", event.type);
 

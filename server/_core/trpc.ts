@@ -1,5 +1,6 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../../shared/const.js";
 import { initTRPC, TRPCError } from "@trpc/server";
+import { rateLimiter } from "./rateLimiter.js";
 import superjson from "superjson";
 import type { TrpcContext } from "./context.js";
 
@@ -25,7 +26,19 @@ const requireUser = t.middleware(async (opts) => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+export const protectedProcedure = t.procedure.use(requireUser).use(async (opts) => {
+  const userId = opts.ctx.user?.id;
+  if (userId) {
+    const isAllowed = await rateLimiter.check(userId);
+    if (!isAllowed) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: "Rate limit exceeded. Please try again later.",
+      });
+    }
+  }
+  return opts.next();
+});
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {

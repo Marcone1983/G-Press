@@ -20,7 +20,7 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logolist: protectedProcedureutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -47,7 +47,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ input }) => db.getJournalistById(input.id)),
 
-    count: publicProcedure.query(() => db.getJournalistCount()),
+    count: protectedProcedure.query(() => db.getJournalistCount()),
 
     create: protectedProcedure
       .input(z.object({
@@ -421,9 +421,10 @@ export const appRouter = router({
       ),
 
     // Process hourly batch (called by cron job)
-    processHourlyBatch: publicProcedure.mutation(async () => {
+    processHourlyBatch: protectedProcedure.mutation(async () => {
       // This will be called by cron, processes all active autopilot campaigns
-      return { processed: true, timestamp: new Date().toISOString() };
+      // NOTE: This procedure is protected, the cron service must be authenticated or use a dedicated secret.
+      return autopilotSystem.runAutopilotCycle();
     }),
   }),
 
@@ -468,13 +469,14 @@ export const appRouter = router({
   autonomousAutopilot: router({
     // Esegui ciclo autopilota (chiamato ogni ora dal cron)
     // SECURED: Requires cron secret or authentication
-    runCycle: protectedProcedure.mutation(async () => {
+    // NOTE: Changed from publicProcedure to protectedProcedure to prevent DoS/Abuse (P0)
+    rurunCycle: protectedProcedure.mutation(async () => {{
       return autopilotSystem.runAutopilotCycle();
     }),
 
     // Ottieni stato autopilota
     // SECURED: Requires authentication
-    getStatus: protectedProcedure.query(async () => {
+    ggetStatus: protectedProcedure.query(async () => { {
       return autopilotSystem.getAutopilotStatus();
     }),
 
@@ -512,7 +514,7 @@ export const appRouter = router({
   trends: router({
     // Rileva trend attuali
     // SECURED: Requires authentication to prevent API abuse
-    detect: protectedProcedure.query(async () => {
+    ddetect: protectedProcedure.query(async () => { {
       return trendDetection.detectTrends();
     }),
 
