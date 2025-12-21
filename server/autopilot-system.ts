@@ -420,9 +420,13 @@ export async function runAutopilotCycle(): Promise<{
   action: string;
   details: any;
 }> {
+  // Carica lo stato prima di iniziare il ciclo
+  await loadAutopilotState(); 
+  
   console.log("[Autopilot] Starting cycle...");
   autopilotStateCache.lastCheck = new Date().toISOString();
   autopilotStateCache.stats.trendsChecked++;
+  await saveAutopilotState(); // Salva lo stato iniziale del ciclo
 
   // 1. Rileva trend
   const trendAnalysis = await detectTrends();
@@ -433,7 +437,8 @@ export async function runAutopilotCycle(): Promise<{
   
   if (!should || !trend) {
     console.log(`[Autopilot] No article needed: ${reason}`);
-    return {
+    await saveAutopilotState(); // Salva lo stato finale del ciclo
+  return {
       action: "no_action",
       details: { reason, trendsFound: trendAnalysis.totalFound }
     };
@@ -471,6 +476,7 @@ export async function runAutopilotCycle(): Promise<{
 
   autopilotStateCache.stats.articlesGenerated++;
   autopilotStateCache.lastArticleGenerated = new Date().toISOString();
+  await saveAutopilotState(); // Salva lo stato dopo la generazione
 
   // 5. Salva articolo in attesa di approvazione
   const pendingArticle: AutopilotArticle = {
@@ -536,6 +542,7 @@ export async function approveAutopilotArticle(articleId: string): Promise<{
   
   autopilotStateCache.pendingApproval = null;
   autopilotStateCache.stats.articlesSent++;
+  await saveAutopilotState(); // Salva lo stato aggiornato
 
   return { 
     success: true, 
@@ -556,6 +563,7 @@ export async function rejectAutopilotArticle(articleId: string, reason?: string)
 
   autopilotStateCache.pendingApproval.status = "rejected";
   autopilotStateCache.pendingApproval = null;
+  await saveAutopilotState(); // Salva lo stato dopo il rifiuto
 
   return { 
     success: true, 

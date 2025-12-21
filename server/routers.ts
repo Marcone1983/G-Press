@@ -15,6 +15,8 @@ import * as trendDetection from "./trend-detection.js";
 import * as articleCache from "./article-cache.js";
 import * as d1 from "./cloudflare-d1.js";
 import * as backup from "./backup.js";
+import * as virality from "./viralita-predittiva.js";
+import * as retargeting from "./retargeting-intelligente.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -986,6 +988,62 @@ export const appRouter = router({
           return backup.validateBackup(input);
         }),
     }),
+  }),
+
+  // ============================================
+  // VIRALITÀ PREDITTIVA (ADDITIVE FEATURE)
+  // Massimizza la crescita e la viralità del Growverse
+  // ============================================
+  virality: router({
+    // Analizza il potenziale di viralità di un articolo
+    getAnalysis: protectedProcedure
+      .input(z.object({
+        articleId: z.number(),
+        targetJournalistIds: z.array(z.number()),
+      }))
+      .query(async ({ input }) => {
+        return virality.getViralityAnalysis(input.articleId, input.targetJournalistIds);
+      }),
+  }),
+
+  // ============================================
+  // RETARGETING INTELLIGENTE (ADDITIVE FEATURE)
+  // Massimizza il re-engagement e la crescita
+  // ============================================
+  retargeting: router({
+    // Analizza il profilo di un giornalista
+    getProfile: protectedProcedure
+      .input(z.object({ journalistId: z.number() }))
+      .query(async ({ input }) => {
+        return retargeting.analyzeJournalistProfile(input.journalistId);
+      }),
+
+    // Genera una strategia di retargeting personalizzata
+    getStrategy: protectedProcedure
+      .input(z.object({ journalistId: z.number() }))
+      .query(async ({ input }) => {
+        return retargeting.generateRetargetingStrategy(input.journalistId);
+      }),
+
+    // Genera strategie per tutti i giornalisti
+    getAllStrategies: protectedProcedure
+      .query(async () => {
+        return retargeting.generateBulkRetargetingStrategies();
+      }),
+
+    // Identifica i candidati con maggior potenziale
+    getHighPotentialCandidates: protectedProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return retargeting.getHighPotentialRetargetCandidates(input?.limit || 50);
+      }),
+
+    // Stima il ROI di una campagna di retargeting
+    estimateROI: protectedProcedure
+      .input(z.object({ targetJournalistIds: z.array(z.number()) }))
+      .query(async ({ input }) => {
+        return retargeting.estimateRetargetingROI(input.targetJournalistIds);
+      }),
   }),
 });
 
