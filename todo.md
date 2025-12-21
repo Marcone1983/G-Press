@@ -355,3 +355,10 @@
 - [x] Generare PDF italiano
 - [x] Tradurre in inglese
 - [x] Generare PDF inglese
+
+
+## PITCH DECK v2 CON SCREENSHOT REALI (COMPLETATO)
+- [x] Copiare screenshot app nella cartella progetto
+- [x] Creare Pitch Deck con screenshot reali dell'app
+- [x] Focus su: innovazione, risparmio, vantaggi GROWVERSE
+- [x] Esportare PDF
