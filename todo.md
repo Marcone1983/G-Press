@@ -336,3 +336,10 @@
 - [x] Analisi mercato e problemi risolti
 - [x] Analisi roadmap e scalabilità
 - [x] Compilazione White Paper finale
+
+
+## DELIVERABLE PRESENTAZIONE HOLDERS
+- [x] PDF professionale White Paper italiano
+- [x] Pitch Deck 15 slide
+- [x] Traduzione inglese White Paper
+- [x] PDF professionale White Paper inglese
