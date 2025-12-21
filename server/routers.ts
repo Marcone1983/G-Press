@@ -17,6 +17,8 @@ import * as d1 from "./cloudflare-d1.js";
 import * as backup from "./backup.js";
 import * as virality from "./viralita-predittiva.js";
 import * as retargeting from "./retargeting-intelligente.js";
+import * as selfHealing from "./self-healing.js";
+import * as predictiveTrend from "./predictive-trend-analysis.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -1043,6 +1045,77 @@ export const appRouter = router({
       .input(z.object({ targetJournalistIds: z.array(z.number()) }))
       .query(async ({ input }) => {
         return retargeting.estimateRetargetingROI(input.targetJournalistIds);
+      }),
+  }),
+
+  // ============================================
+  // SELF-HEALING (ADDITIVE FEATURE)
+  // Audit automatico e monitoraggio della salute
+  // ============================================
+  selfHealing: router({
+    // Esegui audit completo del sistema
+    runAudit: protectedProcedure
+      .query(async () => {
+        return selfHealing.runFullAudit();
+      }),
+
+    // Genera report di audit in Markdown
+    generateReport: protectedProcedure
+      .query(async () => {
+        return selfHealing.generateAuditReport();
+      }),
+
+    // Esegui ciclo di self-healing completo
+    runCycle: protectedProcedure
+      .mutation(async () => {
+        return selfHealing.runSelfHealingCycle();
+      }),
+  }),
+
+  // ============================================
+  // PREDICTIVE TREND ANALYSIS (ADDITIVE FEATURE)
+  // Deep Learning per previsioni di trend
+  // ============================================
+  predictiveTrend: router({
+    // Predici il picco di un trend
+    predictPeak: protectedProcedure
+      .input(z.object({
+        trendName: z.string(),
+        trendDescription: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return predictiveTrend.predictTrendPeak(input.trendName, input.trendDescription);
+      }),
+
+    // Predici picchi di più trend
+    predictMultiple: protectedProcedure
+      .input(z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+      })))
+      .query(async ({ input }) => {
+        return predictiveTrend.predictMultipleTrends(input);
+      }),
+
+    // Genera strategia di pubblicazione per un trend
+    getPublicationStrategy: protectedProcedure
+      .input(z.object({
+        trendName: z.string(),
+        trendDescription: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const prediction = await predictiveTrend.predictTrendPeak(input.trendName, input.trendDescription);
+        return predictiveTrend.generatePublicationStrategy(prediction);
+      }),
+
+    // Determina se generare un articolo per un trend
+    shouldGenerateArticle: protectedProcedure
+      .input(z.object({
+        trendName: z.string(),
+        trendDescription: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return predictiveTrend.shouldGenerateArticleForTrend(input.trendName, input.trendDescription);
       }),
   }),
 });
