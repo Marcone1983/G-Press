@@ -21,6 +21,7 @@ import {
   sendPatterns
 } from "../drizzle/schema.js";
 import { detectTrends, shouldGenerateArticle, type TrendResult } from "./trend-detection.js";
+import * as predictiveTrend from "./predictive-trend-analysis.js";
 import { runMultiAgentPipeline } from "./ai-agents.js";
 import { notifyOwner } from "./_core/notification.js";
 import OpenAI from "openai";
@@ -432,18 +433,41 @@ export async function runAutopilotCycle(): Promise<{
   const trendAnalysis = await detectTrends();
   console.log(`[Autopilot] Found ${trendAnalysis.totalFound} relevant trends`);
 
-  // 2. Controlla se generare articolo
+  // 2. Controlla se generare articolo con logica predittiva
   const { should, trend, reason } = await shouldGenerateArticle(trendAnalysis);
   
   if (!should || !trend) {
     console.log(`[Autopilot] No article needed: ${reason}`);
-    await saveAutopilotState(); // Salva lo stato finale del ciclo
-  return {
+    await saveAutopilotState();
+    return {
       action: "no_action",
       details: { reason, trendsFound: trendAnalysis.totalFound }
     };
   }
 
+  console.log(`[Autopilot] Analyzing trend with Predictive Analysis: ${trend.title}`);
+
+  // 2.1. INTEGRAZIONE PREDITTIVA: Analizza il trend con Deep Learning
+  const predictiveAnalysis = await predictiveTrend.shouldGenerateArticleForTrend(
+    trend.title,
+    trend.description
+  );
+
+  // Se la previsione sconsiglia la generazione, attendi il momento migliore
+  if (!predictiveAnalysis.shouldGenerate) {
+    console.log(`[Autopilot] Predictive analysis suggests to wait: ${predictiveAnalysis.strategy.reasoning}`);
+    await saveAutopilotState();
+    return {
+      action: "waiting_for_optimal_time",
+      details: {
+        trend: trend.title,
+        predictiveStrategy: predictiveAnalysis.strategy,
+        hoursUntilOptimalTime: predictiveAnalysis.prediction.hoursUntilPeak
+      }
+    };
+  }
+
+  console.log(`[Autopilot] Predictive analysis APPROVED generation: ${predictiveAnalysis.strategy.reasoning}`);
   console.log(`[Autopilot] Generating article for trend: ${trend.title}`);
 
   // 3. Recupera documenti Knowledge Base
@@ -491,10 +515,10 @@ export async function runAutopilotCycle(): Promise<{
 
   autopilotStateCache.pendingApproval = pendingArticle;
 
-  // 6. Notifica owner per approvazione
+  // 6. Notifica owner per approvazione (con informazioni predittive)
   await notifyOwner({
-    title: "📝 Nuovo Articolo da Approvare",
-    content: `L'autopilot ha generato un nuovo articolo basato sul trend "${trend.title}".\n\nTitolo: ${article.title}\n\nApri l'app per approvare o modificare.`
+    title: "📝 Nuovo Articolo da Approvare (Timing Ottimale)",
+    content: `L'autopilot ha generato un nuovo articolo basato sul trend "${trend.title}".\n\nTitolo: ${article.title}\n\nTiming Predittivo: ${predictiveAnalysis.strategy.strategy}\nRagione: ${predictiveAnalysis.strategy.reasoning}\n\nApri l'app per approvare o modificare.`
   });
 
   console.log(`[Autopilot] Article generated and pending approval: ${article.title}`);
