@@ -80,9 +80,9 @@ export async function analyzeJournalistProfile(
     clickRate: stats.clickRate,
     avgResponseTime: stats.avgResponseTime || 24, // Default 24 ore
     preferredHour: stats.preferredHour || 9, // Default 9 AM
-    preferredCategories: stats.preferredCategories || [],
+    preferredCategories: [], // Not tracked yet
     daysSinceLastEngagement,
-    totalEmailsReceived: stats.totalEmailsReceived || 0,
+    totalEmailsReceived: stats.totalSent || 0,
     engagementTier,
   };
 }

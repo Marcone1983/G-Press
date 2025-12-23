@@ -12,7 +12,7 @@ const requestCounts = new LRUCache<number, number>({
   ttl: WINDOW_MS,
   allowStale: false,
   updateAgeOnGet: false,
-  updateAgeOnSet: true,
+  updateAgeOnHas: false,
 });
 
 export const rateLimiter = {

@@ -83,7 +83,8 @@ export async function runFullAudit(): Promise<AuditIssue[]> {
     }
 
     // 2.2. Verifica Knowledge Base
-    const documents = await autopilotSystem.getKnowledgeBaseDocuments();
+    // Note: getKnowledgeBaseDocuments non esiste ancora, usiamo uno stub
+    const documents: any[] = []; // TODO: Implementare quando disponibile
     if (documents.length === 0) {
         issues.push({
             severity: "HIGH",

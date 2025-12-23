@@ -1,6 +1,7 @@
 import * as db from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
-import { scheduleFollowUpsForAll } from "./follow-up.js"import { sendEmailUtility } from "./email-utility.js";guration
+import { scheduleFollowUpsForAll } from "./follow-up.js";
+import { sendEmailUtility } from "./email-utility.js";
 // For production, integrate with Resend, SendGrid, or AWS SES
 // Now using the consolidated email utility with Resend integration
 

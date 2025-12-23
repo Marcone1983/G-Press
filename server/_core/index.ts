@@ -1,5 +1,14 @@
 import "dotenv/config";
 import express from "express";
+
+// Extend Express Request to include rawBody for webhook signature verification
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
+  }
+}
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -57,7 +66,9 @@ async function startServer() {
     req.rawBody = req.body;
     // Riconverte il body in JSON per il normale flusso di elaborazione
     try {
-      req.body = JSON.parse(req.rawBody.toString());
+      if (req.rawBody) {
+        req.body = JSON.parse(req.rawBody.toString());
+      }
     } catch (e) {
       // Se non è JSON, lo lasciamo come rawBody e l'handler se ne occuperà
     }

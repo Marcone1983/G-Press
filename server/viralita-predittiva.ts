@@ -40,7 +40,7 @@ export async function calculateViralityScore(
     targetJournalists: JournalistRanking[]
 ): Promise<{ score: number, details: Record<string, number> }> {
     // 1. Performance storica della Categoria
-    const categoryStats = await emailTracking.getCategoryStats(article.category);
+    const categoryStats = await emailTracking.getCategoryStats(article.category || 'general');
     const categoryScore = categoryStats.avgOpenRate * 100; // Normalizza a 0-100
 
     // 2. Performance storica del Tone (Assumendo che il tone sia salvato nell'articolo o si possa dedurre)

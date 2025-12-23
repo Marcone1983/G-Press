@@ -33,6 +33,13 @@ const API_BASE_URL = 'http://localhost:3000/api';
 /**
  * Send emails using tRPC backend API (which has access to RESEND_API_KEY)
  */
+/**
+ * Send emails with attachments - alias for sendEmails
+ */
+export async function sendEmailsWithAttachments(options: EmailOptions): Promise<SendResult> {
+  return sendEmails(options);
+}
+
 export async function sendEmails(options: EmailOptions): Promise<SendResult> {
   const { to, subject, html, from = 'Roberto Romagnino <g.ceo@growverse.net>', attachments } = options;
   

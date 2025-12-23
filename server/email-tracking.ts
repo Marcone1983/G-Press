@@ -360,3 +360,162 @@ export async function getOpensByDay(userId: number) {
 
   return dailyData;
 }
+
+
+/**
+ * Get statistics by category for virality prediction
+ */
+export async function getCategoryStats(category: string): Promise<{
+  category: string;
+  totalSent: number;
+  totalOpened: number;
+  avgOpenRate: number;
+  avgClickRate: number;
+}> {
+  const db = await getDb();
+  if (!db) {
+    return { category, totalSent: 0, totalOpened: 0, avgOpenRate: 0.5, avgClickRate: 0.1 };
+  }
+
+  try {
+    const stats = await db.execute(sql`
+      SELECT 
+        COUNT(*) as totalSent,
+        SUM(CASE WHEN d.status IN ('opened', 'clicked') THEN 1 ELSE 0 END) as totalOpened,
+        SUM(CASE WHEN d.status = 'clicked' THEN 1 ELSE 0 END) as totalClicked
+      FROM distributions d
+      JOIN pressReleases pr ON d.pressReleaseId = pr.id
+      WHERE pr.category = ${category}
+    `) as any;
+
+    if (!stats || stats.length === 0) {
+      return { category, totalSent: 0, totalOpened: 0, avgOpenRate: 0.5, avgClickRate: 0.1 };
+    }
+
+    const s = stats[0];
+    const totalSent = Number(s.totalSent) || 0;
+    const totalOpened = Number(s.totalOpened) || 0;
+    const totalClicked = Number(s.totalClicked) || 0;
+
+    return {
+      category,
+      totalSent,
+      totalOpened,
+      avgOpenRate: totalSent > 0 ? totalOpened / totalSent : 0.5,
+      avgClickRate: totalOpened > 0 ? totalClicked / totalOpened : 0.1,
+    };
+  } catch (error) {
+    console.error("[Email Tracking] Error getting category stats:", error);
+    return { category, totalSent: 0, totalOpened: 0, avgOpenRate: 0.5, avgClickRate: 0.1 };
+  }
+}
+
+/**
+ * Get statistics by tone for virality prediction
+ */
+export async function getToneStats(tone: string): Promise<{
+  tone: string;
+  totalSent: number;
+  totalOpened: number;
+  avgOpenRate: number;
+  avgClickRate: number;
+}> {
+  // Tone stats are not tracked in the current schema
+  // Return default values based on tone type
+  const toneDefaults: Record<string, { avgOpenRate: number; avgClickRate: number }> = {
+    formal: { avgOpenRate: 0.45, avgClickRate: 0.08 },
+    casual: { avgOpenRate: 0.55, avgClickRate: 0.12 },
+    urgent: { avgOpenRate: 0.65, avgClickRate: 0.15 },
+    informative: { avgOpenRate: 0.50, avgClickRate: 0.10 },
+  };
+
+  const defaults = toneDefaults[tone] || { avgOpenRate: 0.5, avgClickRate: 0.1 };
+
+  return {
+    tone,
+    totalSent: 0,
+    totalOpened: 0,
+    ...defaults,
+  };
+}
+
+/**
+ * Get journalist engagement statistics
+ */
+export async function getJournalistStats(journalistId: number): Promise<{
+  totalSent: number;
+  totalOpened: number;
+  totalClicked: number;
+  openRate: number;
+  clickRate: number;
+  lastEngagement: string | null;
+  avgResponseTime: number;
+  preferredHour: number;
+}> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalSent: 0,
+      totalOpened: 0,
+      totalClicked: 0,
+      openRate: 0,
+      clickRate: 0,
+      lastEngagement: null,
+      avgResponseTime: 24,
+      preferredHour: 9,
+    };
+  }
+
+  try {
+    const stats = await db.execute(sql`
+      SELECT 
+        COUNT(*) as totalSent,
+        SUM(CASE WHEN status IN ('opened', 'clicked') THEN 1 ELSE 0 END) as totalOpened,
+        SUM(CASE WHEN status = 'clicked' THEN 1 ELSE 0 END) as totalClicked,
+        MAX(CASE WHEN status IN ('opened', 'clicked') THEN openedAt END) as lastEngagement
+      FROM distributions
+      WHERE journalistId = ${journalistId}
+    `) as any;
+
+    if (!stats || stats.length === 0) {
+      return {
+        totalSent: 0,
+        totalOpened: 0,
+        totalClicked: 0,
+        openRate: 0,
+        clickRate: 0,
+        lastEngagement: null,
+        avgResponseTime: 24,
+        preferredHour: 9,
+      };
+    }
+
+    const s = stats[0];
+    const totalSent = Number(s.totalSent) || 0;
+    const totalOpened = Number(s.totalOpened) || 0;
+    const totalClicked = Number(s.totalClicked) || 0;
+
+    return {
+      totalSent,
+      totalOpened,
+      totalClicked,
+      openRate: totalSent > 0 ? totalOpened / totalSent : 0,
+      clickRate: totalOpened > 0 ? totalClicked / totalOpened : 0,
+      lastEngagement: s.lastEngagement || null,
+      avgResponseTime: 24, // Default, would need more data to calculate
+      preferredHour: 9, // Default morning hour
+    };
+  } catch (error) {
+    console.error("[Email Tracking] Error getting journalist stats:", error);
+    return {
+      totalSent: 0,
+      totalOpened: 0,
+      totalClicked: 0,
+      openRate: 0,
+      clickRate: 0,
+      lastEngagement: null,
+      avgResponseTime: 24,
+      preferredHour: 9,
+    };
+  }
+}

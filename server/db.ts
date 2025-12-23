@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users } from "../drizzle/schema.js";
 import { ENV } from "./_core/env.js";
@@ -550,5 +550,68 @@ export async function saveCompanyInfo(userId: number, data: {
         ${data.website || null}
       )
     `);
+  }
+}
+
+
+/**
+ * Get article by ID for virality prediction
+ */
+export async function getArticleById(articleId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.execute(
+      sql`SELECT * FROM ai_articles_cache WHERE id = ${articleId} LIMIT 1`
+    ) as any;
+
+    if (!result || result.length === 0) return null;
+
+    const article = result[0];
+    return {
+      id: article.id,
+      title: article.title || 'Untitled',
+      content: article.content || '',
+      category: article.category || 'general',
+      tone: 'formal', // Default tone
+      subject: article.subject || article.title || 'Untitled',
+    };
+  } catch (error) {
+    console.error("[DB] Error getting article:", error);
+    return null;
+  }
+}
+
+/**
+ * Get journalist rankings by IDs for virality prediction
+ */
+export async function getJournalistRankingsByIds(journalistIds: number[]) {
+  if (journalistIds.length === 0) return [];
+
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    const idList = journalistIds.join(',');
+    const result = await db.execute(
+      sql`SELECT * FROM journalists WHERE id IN (${sql.raw(idList)})`
+    ) as any;
+
+    if (!result) return [];
+
+    // Map to ranking format with default scores
+    return result.map((j: any) => ({
+      id: j.id,
+      email: j.email,
+      name: j.name,
+      score: 50, // Default score
+      opens: 0,
+      clicks: 0,
+      tier: 'B' as const,
+    }));
+  } catch (error) {
+    console.error("[DB] Error getting journalist rankings:", error);
+    return [];
   }
 }
