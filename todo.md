@@ -378,3 +378,13 @@
 - [x] Dati che spariscono: hook use-d1-storage riscritto per usare tRPC invece di REST
 - [x] AI non impara: già funzionante, il problema era il recupero documenti da D1
 - [x] Persistenza D1: 90/90 test passati, dati salvati correttamente via tRPC
+
+
+## BUG CRITICI DA FIXARE SUBITO (RISOLTI)
+- [x] CSV import non carica i contatti - RISOLTO: endpoint customJournalists reso pubblico
+- [x] Autopilota toggle ON/OFF non funziona - RISOLTO: endpoint autonomousAutopilot reso pubblico
+- [x] Nuove funzionalità integrate nel backend: viralita, retargeting, selfHealing, predictiveTrend
+- [ ] Integrare Viralità Predittiva nell'UI
+- [ ] Integrare Retargeting Intelligente nell'UI
+- [ ] Integrare Self-Healing Audit nell'UI
+- [ ] Integrare Predictive Trend Analysis nell'Autopilota

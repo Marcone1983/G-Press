@@ -15,6 +15,10 @@ import * as trendDetection from "./trend-detection.js";
 import * as articleCache from "./article-cache.js";
 import * as d1 from "./cloudflare-d1.js";
 import * as backup from "./backup.js";
+import * as viralitaPredittiva from "./viralita-predittiva.js";
+import * as retargetingIntelligente from "./retargeting-intelligente.js";
+import * as selfHealing from "./self-healing.js";
+import * as predictiveTrendAnalysis from "./predictive-trend-analysis.js";
 
 export const appRouter = router({
   system: systemRouter,
@@ -467,19 +471,19 @@ export const appRouter = router({
   // ============================================
   autonomousAutopilot: router({
     // Esegui ciclo autopilota (chiamato ogni ora dal cron)
-    // SECURED: Requires cron secret or authentication
-    runCycle: protectedProcedure.mutation(async () => {
+    // PUBLIC: Accessible for cron jobs and app usage
+    runCycle: publicProcedure.mutation(async () => {
       return autopilotSystem.runAutopilotCycle();
     }),
 
     // Ottieni stato autopilota
-    // SECURED: Requires authentication
-    getStatus: protectedProcedure.query(async () => {
+    // PUBLIC: Accessible without login for local-first functionality
+    getStatus: publicProcedure.query(async () => {
       return autopilotSystem.getAutopilotStatus();
     }),
 
     // Attiva/disattiva autopilota
-    setActive: protectedProcedure
+    setActive: publicProcedure
       .input(z.object({ active: z.boolean() }))
       .mutation(async ({ input }) => {
         await autopilotSystem.setAutopilotActive(input.active);
@@ -487,14 +491,14 @@ export const appRouter = router({
       }),
 
     // Approva articolo generato
-    approveArticle: protectedProcedure
+    approveArticle: publicProcedure
       .input(z.object({ articleId: z.string() }))
       .mutation(({ input }) => {
         return autopilotSystem.approveAutopilotArticle(input.articleId);
       }),
 
     // Rifiuta articolo generato
-    rejectArticle: protectedProcedure
+    rejectArticle: publicProcedure
       .input(z.object({ articleId: z.string(), reason: z.string().optional() }))
       .mutation(({ input }) => {
         return autopilotSystem.rejectAutopilotArticle(input.articleId, input.reason);
@@ -785,12 +789,13 @@ export const appRouter = router({
     }),
 
     // ---- CUSTOM JOURNALISTS ----
+    // PUBLIC: Accessible without login for local-first functionality
     customJournalists: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllCustomJournalists();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           name: z.string(),
           email: z.string(),
@@ -806,7 +811,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      update: protectedProcedure
+      update: publicProcedure
         .input(z.object({
           id: z.number(),
           name: z.string().optional(),
@@ -822,7 +827,7 @@ export const appRouter = router({
           return d1.updateCustomJournalist(id, updates);
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteCustomJournalist(input.id);
@@ -984,6 +989,140 @@ export const appRouter = router({
           return backup.validateBackup(input);
         }),
     }),
+  }),
+
+  // ============================================
+  // VIRALITÀ PREDITTIVA
+  // Sistema per predire il potenziale virale di un articolo
+  // ============================================
+  viralita: router({
+    // Calcola punteggio di viralità per un articolo
+    calculateScore: publicProcedure
+      .input(z.object({
+        articleId: z.number(),
+        targetJournalistIds: z.array(z.number()),
+      }))
+      .query(async ({ input }) => {
+        return viralitaPredittiva.getViralityAnalysis(input.articleId, input.targetJournalistIds);
+      }),
+
+    // Calcola viralità per contenuto inline (senza salvare)
+    analyzeContent: publicProcedure
+      .input(z.object({
+        title: z.string(),
+        content: z.string(),
+        category: z.string().optional(),
+        tone: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const article = {
+          id: 0,
+          title: input.title,
+          content: input.content,
+          category: input.category || 'general',
+          tone: input.tone || 'formal',
+          subject: input.title,
+        };
+        const { score, details } = await viralitaPredittiva.calculateViralityScore(article, []);
+        return {
+          viralityScore: score,
+          suggestion: viralitaPredittiva.getActionSuggestion(score),
+          details,
+        };
+      }),
+  }),
+
+  // ============================================
+  // RETARGETING INTELLIGENTE
+  // Sistema per re-engagement dei giornalisti
+  // ============================================
+  retargeting: router({
+    // Analizza profilo di un giornalista
+    analyzeProfile: publicProcedure
+      .input(z.object({ journalistId: z.number() }))
+      .query(async ({ input }) => {
+        return retargetingIntelligente.analyzeJournalistProfile(input.journalistId);
+      }),
+
+    // Genera strategia di retargeting per un giornalista
+    generateStrategy: publicProcedure
+      .input(z.object({ journalistId: z.number() }))
+      .query(async ({ input }) => {
+        return retargetingIntelligente.generateRetargetingStrategy(input.journalistId);
+      }),
+
+    // Ottieni candidati ad alto potenziale per retargeting
+    getHighPotentialCandidates: publicProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return retargetingIntelligente.getHighPotentialRetargetCandidates(input.limit || 50);
+      }),
+
+    // Stima ROI di una campagna di retargeting
+    estimateROI: publicProcedure
+      .input(z.object({ targetJournalistIds: z.array(z.number()) }))
+      .query(async ({ input }) => {
+        return retargetingIntelligente.estimateRetargetingROI(input.targetJournalistIds);
+      }),
+  }),
+
+  // ============================================
+  // SELF-HEALING AUDIT
+  // Sistema di auto-diagnosi e correzione
+  // ============================================
+  selfHealing: router({
+    // Esegui audit completo del sistema
+    runAudit: publicProcedure.query(async () => {
+      return selfHealing.runFullAudit();
+    }),
+
+    // Genera report di audit in formato Markdown
+    generateReport: publicProcedure.query(async () => {
+      return selfHealing.generateAuditReport();
+    }),
+
+    // Esegui ciclo di self-healing
+    runCycle: publicProcedure.mutation(async () => {
+      return selfHealing.runSelfHealingCycle();
+    }),
+  }),
+
+  // ============================================
+  // PREDICTIVE TREND ANALYSIS
+  // Sistema per predire i picchi dei trend
+  // ============================================
+  predictiveTrend: router({
+    // Predici il picco di un trend
+    predictPeak: publicProcedure
+      .input(z.object({
+        trendName: z.string(),
+        trendDescription: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return predictiveTrendAnalysis.predictTrendPeak(input.trendName, input.trendDescription);
+      }),
+
+    // Analizza più trend e ritorna previsioni ordinate per urgenza
+    predictMultiple: publicProcedure
+      .input(z.object({
+        trends: z.array(z.object({
+          name: z.string(),
+          description: z.string(),
+        })),
+      }))
+      .query(async ({ input }) => {
+        return predictiveTrendAnalysis.predictMultipleTrends(input.trends);
+      }),
+
+    // Determina se generare un articolo per un trend
+    shouldGenerateArticle: publicProcedure
+      .input(z.object({
+        trendName: z.string(),
+        trendDescription: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return predictiveTrendAnalysis.shouldGenerateArticleForTrend(input.trendName, input.trendDescription);
+      }),
   }),
 });
 

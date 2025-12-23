@@ -112,7 +112,11 @@ describe('D1 Persistence Tests via tRPC', () => {
   describe('Custom Journalists', () => {
     it('should retrieve custom journalists', async () => {
       const journalists = await trpcCall('cloudflare.customJournalists.list');
-      expect(journalists === undefined || Array.isArray(journalists)).toBe(true);
+      // La risposta può essere un oggetto con json o direttamente un array
+      const isValid = journalists === undefined || 
+                      Array.isArray(journalists) || 
+                      Array.isArray(journalists?.json);
+      expect(isValid).toBe(true);
     });
   });
   
