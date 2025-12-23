@@ -124,7 +124,7 @@ export default function HomeScreen() {
   const { save: savePressReleaseToD1 } = usePressReleases();
   
   // Hook D1 per email stats
-  const { track: trackEmailEvent } = useEmailStats();
+  const { trackEvent: trackEmailEvent } = useEmailStats();
   
   // Sincronizza giornalisti custom da D1
   useEffect(() => {
@@ -410,7 +410,7 @@ export default function HomeScreen() {
         content: pressRelease.content,
         subject: pressRelease.subject || pressRelease.title,
         category: pressRelease.category,
-        recipients_count: pressRelease.recipientCount || 0,
+        recipientsCount: pressRelease.recipientCount || 0,
       });
       
       // Backup locale

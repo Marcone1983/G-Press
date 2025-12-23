@@ -362,3 +362,19 @@
 - [x] Creare Pitch Deck con screenshot reali dell'app
 - [x] Focus su: innovazione, risparmio, vantaggi GROWVERSE
 - [x] Esportare PDF
+
+
+## VIDEO DEMO ANIMATO G-PRESS (COMPLETATO)
+- [x] Installare MoviePy e ffmpeg
+- [x] Creare script Python per video animato
+- [x] Aggiungere transizioni e effetti sugli screenshot
+- [x] Aggiungere testo animato con fade effect
+- [ ] Aggiungere musica di sottofondo (opzionale)
+- [x] Generare video finale MP4 (33 secondi)
+
+
+## BUG CRITICI DA RISOLVERE (TUTTI RISOLTI)
+- [x] CSV import: aggiunto modal per selezione categoria
+- [x] Dati che spariscono: hook use-d1-storage riscritto per usare tRPC invece di REST
+- [x] AI non impara: già funzionante, il problema era il recupero documenti da D1
+- [x] Persistenza D1: 90/90 test passati, dati salvati correttamente via tRPC

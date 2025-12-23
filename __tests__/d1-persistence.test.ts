@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-const TRPC_URL = 'http://127.0.0.1:3000/trpc';
+const TRPC_URL = 'http://127.0.0.1:3000/api/trpc';
 
 // Helper per chiamate tRPC
 async function trpcCall(procedure: string, input?: any) {
@@ -103,6 +103,7 @@ describe('D1 Persistence Tests via tRPC', () => {
   
   describe('Journalist Rankings', () => {
     it('should retrieve rankings', async () => {
+      // Rankings usa 'top' non 'list'
       const rankings = await trpcCall('cloudflare.rankings.top');
       expect(rankings === undefined || Array.isArray(rankings)).toBe(true);
     });

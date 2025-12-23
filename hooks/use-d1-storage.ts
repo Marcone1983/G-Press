@@ -2,13 +2,12 @@
  * Hook per accedere ai dati persistenti su Cloudflare D1
  * 
  * Questo hook fornisce un'interfaccia React per accedere ai dati
- * salvati su D1, con caching locale e sincronizzazione automatica.
+ * salvati su D1 tramite tRPC, con caching locale e sincronizzazione automatica.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getApiBaseUrl } from '@/constants/oauth';
-import * as Auth from '@/lib/auth';
+import { trpc } from '@/lib/trpc';
 
 // Cache keys per fallback locale
 const CACHE_KEYS = {
@@ -21,28 +20,6 @@ const CACHE_KEYS = {
   RANKINGS: 'gpress_d1_cache_rankings',
   SETTINGS: 'gpress_d1_cache_settings',
 };
-
-// Helper per chiamate API
-async function apiCall<T>(endpoint: string, method: 'GET' | 'POST' = 'GET', body?: any): Promise<T> {
-  const baseUrl = getApiBaseUrl();
-  const token = await Auth.getSessionToken();
-  
-  const response = await fetch(`${baseUrl}/api/d1/${endpoint}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    },
-    credentials: 'include',
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  return response.json();
-}
 
 // ============================================
 // KNOWLEDGE BASE DOCUMENTS
@@ -64,55 +41,60 @@ export function useKnowledgeBase() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDocuments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<any[]>('documents');
-      const docs = result.map((doc: any) => ({
+  // tRPC queries
+  const documentsQuery = trpc.cloudflare.documents.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.documents.save.useMutation();
+  const deleteMutation = trpc.cloudflare.documents.delete.useMutation();
+
+  // Sync tRPC data to local state
+  useEffect(() => {
+    if (documentsQuery.data) {
+      const docs = documentsQuery.data.map((doc: any) => ({
         ...doc,
         tags: doc.tags ? (typeof doc.tags === 'string' ? JSON.parse(doc.tags) : doc.tags) : [],
       }));
       setDocuments(docs);
-      // Cache locally
-      await AsyncStorage.setItem(CACHE_KEYS.DOCUMENTS, JSON.stringify(docs));
-    } catch (err: any) {
-      console.error('[D1] Error loading documents:', err);
-      setError(err.message);
-      // Try to load from cache
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.DOCUMENTS);
-        if (cached) setDocuments(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
+      // Cache locally for offline access
+      AsyncStorage.setItem(CACHE_KEYS.DOCUMENTS, JSON.stringify(docs)).catch(() => {});
     }
-  }, []);
+    setLoading(documentsQuery.isLoading);
+    if (documentsQuery.error) {
+      setError(documentsQuery.error.message);
+      // Try to load from cache on error
+      AsyncStorage.getItem(CACHE_KEYS.DOCUMENTS).then(cached => {
+        if (cached) setDocuments(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [documentsQuery.data, documentsQuery.isLoading, documentsQuery.error]);
+
+  const loadDocuments = useCallback(async () => {
+    await documentsQuery.refetch();
+  }, [documentsQuery]);
 
   const saveDocument = useCallback(async (doc: { title: string; content: string; type?: string; category?: string; tags?: string[] }) => {
     try {
-      const result = await apiCall<{ id: number }>('documents', 'POST', doc);
-      await loadDocuments(); // Refresh list
+      const result = await saveMutation.mutateAsync(doc);
+      await documentsQuery.refetch();
       return result.id;
     } catch (err: any) {
       console.error('[D1] Error saving document:', err);
       throw err;
     }
-  }, [loadDocuments]);
+  }, [saveMutation, documentsQuery]);
 
   const deleteDocument = useCallback(async (id: number) => {
     try {
-      await apiCall<void>(`documents/${id}`, 'POST', { action: 'delete' });
+      await deleteMutation.mutateAsync({ id });
       setDocuments(prev => prev.filter(d => d.id !== id));
     } catch (err: any) {
       console.error('[D1] Error deleting document:', err);
       throw err;
     }
-  }, []);
-
-  useEffect(() => {
-    loadDocuments();
-  }, [loadDocuments]);
+  }, [deleteMutation]);
 
   return { documents, loading, error, refresh: loadDocuments, save: saveDocument, delete: deleteDocument };
 }
@@ -139,64 +121,68 @@ export function useCustomJournalists() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadJournalists = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<any[]>('journalists');
-      const mapped = result.map((j: any) => ({
+  const journalistsQuery = trpc.cloudflare.customJournalists.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.customJournalists.save.useMutation();
+  const updateMutation = trpc.cloudflare.customJournalists.update.useMutation();
+  const deleteMutation = trpc.cloudflare.customJournalists.delete.useMutation();
+
+  useEffect(() => {
+    if (journalistsQuery.data) {
+      const mapped = journalistsQuery.data.map((j: any) => ({
         ...j,
         isVip: j.is_vip === 1 || j.isVip === true,
         isBlacklisted: j.is_blacklisted === 1 || j.isBlacklisted === true,
       }));
       setJournalists(mapped);
-      await AsyncStorage.setItem(CACHE_KEYS.JOURNALISTS, JSON.stringify(mapped));
-    } catch (err: any) {
-      console.error('[D1] Error loading journalists:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.JOURNALISTS);
-        if (cached) setJournalists(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
+      AsyncStorage.setItem(CACHE_KEYS.JOURNALISTS, JSON.stringify(mapped)).catch(() => {});
     }
-  }, []);
+    setLoading(journalistsQuery.isLoading);
+    if (journalistsQuery.error) {
+      setError(journalistsQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.JOURNALISTS).then(cached => {
+        if (cached) setJournalists(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [journalistsQuery.data, journalistsQuery.isLoading, journalistsQuery.error]);
+
+  const loadJournalists = useCallback(async () => {
+    await journalistsQuery.refetch();
+  }, [journalistsQuery]);
 
   const saveJournalist = useCallback(async (journalist: Omit<CustomJournalist, 'id' | 'created_at'>) => {
     try {
-      const result = await apiCall<{ id: number }>('journalists', 'POST', journalist);
-      await loadJournalists();
+      const result = await saveMutation.mutateAsync(journalist);
+      await journalistsQuery.refetch();
       return result.id;
     } catch (err: any) {
       console.error('[D1] Error saving journalist:', err);
       throw err;
     }
-  }, [loadJournalists]);
+  }, [saveMutation, journalistsQuery]);
 
   const updateJournalist = useCallback(async (id: number, updates: Partial<Omit<CustomJournalist, 'id' | 'email' | 'created_at'>>) => {
     try {
-      await apiCall<void>(`journalists/${id}`, 'POST', { action: 'update', ...updates });
-      await loadJournalists();
+      await updateMutation.mutateAsync({ id, ...updates });
+      await journalistsQuery.refetch();
     } catch (err: any) {
       console.error('[D1] Error updating journalist:', err);
       throw err;
     }
-  }, [loadJournalists]);
+  }, [updateMutation, journalistsQuery]);
 
   const deleteJournalist = useCallback(async (id: number) => {
     try {
-      await apiCall<void>(`journalists/${id}`, 'POST', { action: 'delete' });
+      await deleteMutation.mutateAsync({ id });
       setJournalists(prev => prev.filter(j => j.id !== id));
     } catch (err: any) {
       console.error('[D1] Error deleting journalist:', err);
       throw err;
     }
-  }, []);
-
-  useEffect(() => {
-    loadJournalists();
-  }, [loadJournalists]);
+  }, [deleteMutation]);
 
   return { journalists, loading, error, refresh: loadJournalists, save: saveJournalist, update: updateJournalist, delete: deleteJournalist };
 }
@@ -218,49 +204,52 @@ export function useTrainingExamples() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadExamples = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<TrainingExample[]>('training');
-      setExamples(result);
-      await AsyncStorage.setItem(CACHE_KEYS.TRAINING, JSON.stringify(result));
-    } catch (err: any) {
-      console.error('[D1] Error loading training examples:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.TRAINING);
-        if (cached) setExamples(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
+  const examplesQuery = trpc.cloudflare.trainingExamples.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.trainingExamples.save.useMutation();
+  const deleteMutation = trpc.cloudflare.trainingExamples.delete.useMutation();
+
+  useEffect(() => {
+    if (examplesQuery.data) {
+      setExamples(examplesQuery.data);
+      AsyncStorage.setItem(CACHE_KEYS.TRAINING, JSON.stringify(examplesQuery.data)).catch(() => {});
     }
-  }, []);
+    setLoading(examplesQuery.isLoading);
+    if (examplesQuery.error) {
+      setError(examplesQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.TRAINING).then(cached => {
+        if (cached) setExamples(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [examplesQuery.data, examplesQuery.isLoading, examplesQuery.error]);
+
+  const loadExamples = useCallback(async () => {
+    await examplesQuery.refetch();
+  }, [examplesQuery]);
 
   const saveExample = useCallback(async (example: Omit<TrainingExample, 'id' | 'created_at'>) => {
     try {
-      const result = await apiCall<{ id: number }>('training', 'POST', example);
-      await loadExamples();
+      const result = await saveMutation.mutateAsync(example);
+      await examplesQuery.refetch();
       return result.id;
     } catch (err: any) {
       console.error('[D1] Error saving training example:', err);
       throw err;
     }
-  }, [loadExamples]);
+  }, [saveMutation, examplesQuery]);
 
   const deleteExample = useCallback(async (id: number) => {
     try {
-      await apiCall<void>(`training/${id}`, 'POST', { action: 'delete' });
+      await deleteMutation.mutateAsync({ id });
       setExamples(prev => prev.filter(e => e.id !== id));
     } catch (err: any) {
       console.error('[D1] Error deleting training example:', err);
       throw err;
     }
-  }, []);
-
-  useEffect(() => {
-    loadExamples();
-  }, [loadExamples]);
+  }, [deleteMutation]);
 
   return { examples, loading, error, refresh: loadExamples, save: saveExample, delete: deleteExample };
 }
@@ -288,24 +277,30 @@ export function useEmailStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStats = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<EmailStats>('tracking/stats');
-      setStats(result);
-      await AsyncStorage.setItem(CACHE_KEYS.STATS, JSON.stringify(result));
-    } catch (err: any) {
-      console.error('[D1] Error loading email stats:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.STATS);
-        if (cached) setStats(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
+  const statsQuery = trpc.cloudflare.tracking.stats.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const trackMutation = trpc.cloudflare.tracking.track.useMutation();
+
+  useEffect(() => {
+    if (statsQuery.data) {
+      setStats(statsQuery.data);
+      AsyncStorage.setItem(CACHE_KEYS.STATS, JSON.stringify(statsQuery.data)).catch(() => {});
     }
-  }, []);
+    setLoading(statsQuery.isLoading);
+    if (statsQuery.error) {
+      setError(statsQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.STATS).then(cached => {
+        if (cached) setStats(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [statsQuery.data, statsQuery.isLoading, statsQuery.error]);
+
+  const loadStats = useCallback(async () => {
+    await statsQuery.refetch();
+  }, [statsQuery]);
 
   const trackEvent = useCallback(async (event: {
     pressReleaseId?: number;
@@ -315,83 +310,17 @@ export function useEmailStats() {
     eventData?: any;
   }) => {
     try {
-      await apiCall<void>('tracking', 'POST', event);
+      await trackMutation.mutateAsync(event);
     } catch (err: any) {
       console.error('[D1] Error tracking event:', err);
     }
-  }, []);
+  }, [trackMutation]);
 
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
-  return { stats, loading, error, refresh: loadStats, track: trackEvent };
+  return { stats, loading, error, refresh: loadStats, trackEvent };
 }
 
 // ============================================
-// JOURNALIST RANKINGS
-// ============================================
-
-export interface JournalistRanking {
-  id: number;
-  journalist_email: string;
-  journalist_name?: string;
-  tier: string;
-  engagement_score: number;
-  opens: number;
-  clicks: number;
-  total_sent: number;
-  updated_at: string;
-}
-
-export function useJournalistRankings() {
-  const [rankings, setRankings] = useState<JournalistRanking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadRankings = useCallback(async (limit?: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<JournalistRanking[]>(`rankings?limit=${limit || 50}`);
-      setRankings(result);
-      await AsyncStorage.setItem(CACHE_KEYS.RANKINGS, JSON.stringify(result));
-    } catch (err: any) {
-      console.error('[D1] Error loading rankings:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.RANKINGS);
-        if (cached) setRankings(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const updateRanking = useCallback(async (ranking: {
-    email: string;
-    name?: string;
-    opens?: number;
-    clicks?: number;
-    totalSent?: number;
-  }) => {
-    try {
-      await apiCall<void>('rankings', 'POST', ranking);
-      await loadRankings();
-    } catch (err: any) {
-      console.error('[D1] Error updating ranking:', err);
-    }
-  }, [loadRankings]);
-
-  useEffect(() => {
-    loadRankings();
-  }, [loadRankings]);
-
-  return { rankings, loading, error, refresh: loadRankings, update: updateRanking };
-}
-
-// ============================================
-// PRESS RELEASES HISTORY
+// PRESS RELEASES
 // ============================================
 
 export interface PressRelease {
@@ -400,9 +329,10 @@ export interface PressRelease {
   content: string;
   subject?: string;
   category?: string;
-  recipients_count: number;
-  sent_at: string;
-  status: string;
+  recipientsCount: number;
+  status?: string;
+  sent_at?: string;
+  created_at: string;
 }
 
 export function usePressReleases() {
@@ -410,47 +340,179 @@ export function usePressReleases() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadReleases = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<PressRelease[]>('releases');
-      setReleases(result);
-      await AsyncStorage.setItem(CACHE_KEYS.RELEASES, JSON.stringify(result));
-    } catch (err: any) {
-      console.error('[D1] Error loading press releases:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.RELEASES);
-        if (cached) setReleases(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const releasesQuery = trpc.cloudflare.pressReleases.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.pressReleases.save.useMutation();
 
-  const saveRelease = useCallback(async (release: Omit<PressRelease, 'id' | 'sent_at' | 'status'>) => {
+  useEffect(() => {
+    if (releasesQuery.data) {
+      setReleases(releasesQuery.data);
+      AsyncStorage.setItem(CACHE_KEYS.RELEASES, JSON.stringify(releasesQuery.data)).catch(() => {});
+    }
+    setLoading(releasesQuery.isLoading);
+    if (releasesQuery.error) {
+      setError(releasesQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.RELEASES).then(cached => {
+        if (cached) setReleases(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [releasesQuery.data, releasesQuery.isLoading, releasesQuery.error]);
+
+  const loadReleases = useCallback(async () => {
+    await releasesQuery.refetch();
+  }, [releasesQuery]);
+
+  const saveRelease = useCallback(async (release: {
+    title: string;
+    content: string;
+    recipientsCount: number;
+    subject?: string;
+    category?: string;
+  }) => {
     try {
-      const result = await apiCall<{ id: number }>('releases', 'POST', {
-        title: release.title,
-        content: release.content,
-        subject: release.subject,
-        category: release.category,
-        recipientsCount: release.recipients_count,
-      });
-      await loadReleases();
+      const result = await saveMutation.mutateAsync(release);
+      await releasesQuery.refetch();
       return result.id;
     } catch (err: any) {
       console.error('[D1] Error saving press release:', err);
       throw err;
     }
-  }, [loadReleases]);
-
-  useEffect(() => {
-    loadReleases();
-  }, [loadReleases]);
+  }, [saveMutation, releasesQuery]);
 
   return { releases, loading, error, refresh: loadReleases, save: saveRelease };
+}
+
+// ============================================
+// JOURNALIST RANKINGS
+// ============================================
+
+export interface JournalistRanking {
+  email: string;
+  name?: string;
+  score: number;
+  opens: number;
+  clicks: number;
+  tier: 'A' | 'B' | 'C';
+  updated_at: string;
+}
+
+export function useJournalistRankings() {
+  const [rankings, setRankings] = useState<JournalistRanking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const rankingsQuery = trpc.cloudflare.rankings.top.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const updateMutation = trpc.cloudflare.rankings.update.useMutation();
+
+  useEffect(() => {
+    if (rankingsQuery.data) {
+      setRankings(rankingsQuery.data);
+      AsyncStorage.setItem(CACHE_KEYS.RANKINGS, JSON.stringify(rankingsQuery.data)).catch(() => {});
+    }
+    setLoading(rankingsQuery.isLoading);
+    if (rankingsQuery.error) {
+      setError(rankingsQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.RANKINGS).then(cached => {
+        if (cached) setRankings(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [rankingsQuery.data, rankingsQuery.isLoading, rankingsQuery.error]);
+
+  const loadRankings = useCallback(async () => {
+    await rankingsQuery.refetch();
+  }, [rankingsQuery]);
+
+  const updateRanking = useCallback(async (ranking: Omit<JournalistRanking, 'updated_at'>) => {
+    try {
+      await updateMutation.mutateAsync(ranking);
+      await rankingsQuery.refetch();
+    } catch (err: any) {
+      console.error('[D1] Error updating ranking:', err);
+      throw err;
+    }
+  }, [updateMutation, rankingsQuery]);
+
+  return { rankings, loading, error, refresh: loadRankings, update: updateRanking };
+}
+
+// ============================================
+// EMAIL TEMPLATES
+// ============================================
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject?: string;
+  content: string;
+  isDefault?: boolean;
+  created_at: string;
+}
+
+export function useEmailTemplates() {
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const templatesQuery = trpc.cloudflare.templates.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.templates.save.useMutation();
+  const deleteMutation = trpc.cloudflare.templates.delete.useMutation();
+
+  useEffect(() => {
+    if (templatesQuery.data) {
+      setTemplates(templatesQuery.data);
+      AsyncStorage.setItem(CACHE_KEYS.TEMPLATES, JSON.stringify(templatesQuery.data)).catch(() => {});
+    }
+    setLoading(templatesQuery.isLoading);
+    if (templatesQuery.error) {
+      setError(templatesQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.TEMPLATES).then(cached => {
+        if (cached) setTemplates(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [templatesQuery.data, templatesQuery.isLoading, templatesQuery.error]);
+
+  const loadTemplates = useCallback(async () => {
+    await templatesQuery.refetch();
+  }, [templatesQuery]);
+
+  const saveTemplate = useCallback(async (template: {
+    name: string;
+    content: string;
+    subject?: string;
+    isDefault?: boolean;
+  }) => {
+    try {
+      const result = await saveMutation.mutateAsync(template);
+      await templatesQuery.refetch();
+      return result.id;
+    } catch (err: any) {
+      console.error('[D1] Error saving template:', err);
+      throw err;
+    }
+  }, [saveMutation, templatesQuery]);
+
+  const deleteTemplate = useCallback(async (id: number) => {
+    try {
+      await deleteMutation.mutateAsync({ id });
+      setTemplates(prev => prev.filter(t => t.id !== id));
+    } catch (err: any) {
+      console.error('[D1] Error deleting template:', err);
+      throw err;
+    }
+  }, [deleteMutation]);
+
+  return { templates, loading, error, refresh: loadTemplates, save: saveTemplate, delete: deleteTemplate };
 }
 
 // ============================================
@@ -462,64 +524,173 @@ export function useAppSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiCall<Record<string, string>>('settings');
-      setSettings(result);
-      await AsyncStorage.setItem(CACHE_KEYS.SETTINGS, JSON.stringify(result));
-    } catch (err: any) {
-      console.error('[D1] Error loading settings:', err);
-      setError(err.message);
-      try {
-        const cached = await AsyncStorage.getItem(CACHE_KEYS.SETTINGS);
-        if (cached) setSettings(JSON.parse(cached));
-      } catch {}
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const settingsQuery = trpc.cloudflare.settings.getAll.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const setMutation = trpc.cloudflare.settings.set.useMutation();
 
-  const getSetting = useCallback((key: string): string | undefined => {
-    return settings[key];
-  }, [settings]);
+  useEffect(() => {
+    if (settingsQuery.data) {
+      // getAllSettings returns Record<string, string> directly
+      const settingsMap = settingsQuery.data as Record<string, string>;
+      setSettings(settingsMap);
+      AsyncStorage.setItem(CACHE_KEYS.SETTINGS, JSON.stringify(settingsMap)).catch(() => {});
+    }
+    setLoading(settingsQuery.isLoading);
+    if (settingsQuery.error) {
+      setError(settingsQuery.error.message);
+      AsyncStorage.getItem(CACHE_KEYS.SETTINGS).then(cached => {
+        if (cached) setSettings(JSON.parse(cached));
+      }).catch(() => {});
+    }
+  }, [settingsQuery.data, settingsQuery.isLoading, settingsQuery.error]);
+
+  const loadSettings = useCallback(async () => {
+    await settingsQuery.refetch();
+  }, [settingsQuery]);
 
   const setSetting = useCallback(async (key: string, value: string) => {
     try {
-      await apiCall<void>('settings', 'POST', { key, value });
+      await setMutation.mutateAsync({ key, value });
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch (err: any) {
       console.error('[D1] Error setting value:', err);
       throw err;
     }
-  }, []);
+  }, [setMutation]);
 
-  useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+  const getSetting = useCallback((key: string, defaultValue: string = '') => {
+    return settings[key] || defaultValue;
+  }, [settings]);
 
-  return { settings, loading, error, refresh: loadSettings, get: getSetting, set: setSetting };
+  return { settings, loading, error, refresh: loadSettings, set: setSetting, get: getSetting };
 }
 
 // ============================================
-// INITIALIZE D1 DATABASE
+// AUTOPILOT STATE
 // ============================================
 
-export function useD1Init() {
-  const [initialized, setInitialized] = useState(false);
+export interface AutopilotState {
+  isActive: boolean;
+  lastCheck?: string;
+  lastArticle?: string;
+  stats?: {
+    trendsChecked: number;
+    articlesGenerated: number;
+    articlesSent: number;
+  };
+}
+
+export function useAutopilotState() {
+  const [state, setState] = useState<AutopilotState>({ isActive: false });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const initialize = useCallback(async () => {
-    try {
-      await apiCall<void>('init', 'POST');
-      setInitialized(true);
-      console.log('[D1] Database initialized successfully');
-    } catch (err: any) {
-      console.error('[D1] Error initializing database:', err);
-      setError(err.message);
-    }
-  }, []);
+  const stateQuery = trpc.cloudflare.autopilot.status.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const updateMutation = trpc.cloudflare.autopilot.update.useMutation();
 
-  return { initialized, error, initialize };
+  useEffect(() => {
+    if (stateQuery.data) {
+      setState(stateQuery.data);
+    }
+    setLoading(stateQuery.isLoading);
+    if (stateQuery.error) {
+      setError(stateQuery.error.message);
+    }
+  }, [stateQuery.data, stateQuery.isLoading, stateQuery.error]);
+
+  const loadState = useCallback(async () => {
+    await stateQuery.refetch();
+  }, [stateQuery]);
+
+  const updateState = useCallback(async (updates: Partial<AutopilotState>) => {
+    try {
+      await updateMutation.mutateAsync(updates);
+      setState(prev => ({ ...prev, ...updates }));
+    } catch (err: any) {
+      console.error('[D1] Error updating autopilot state:', err);
+      throw err;
+    }
+  }, [updateMutation]);
+
+  return { state, loading, error, refresh: loadState, update: updateState };
+}
+
+// ============================================
+// FOLLOW-UP SEQUENCES
+// ============================================
+
+export interface FollowupSequence {
+  id: number;
+  journalistEmail: string;
+  originalSubject: string;
+  originalContent?: string;
+  step: number;
+  nextSendAt?: string;
+  status: 'pending' | 'sent' | 'cancelled';
+  created_at: string;
+}
+
+export function useFollowupSequences() {
+  const [sequences, setSequences] = useState<FollowupSequence[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const sequencesQuery = trpc.cloudflare.followups.list.useQuery(undefined, {
+    retry: 2,
+    refetchOnWindowFocus: false,
+  });
+  
+  const saveMutation = trpc.cloudflare.followups.save.useMutation();
+  const cancelMutation = trpc.cloudflare.followups.cancelByEmail.useMutation();
+
+  useEffect(() => {
+    if (sequencesQuery.data) {
+      setSequences(sequencesQuery.data);
+    }
+    setLoading(sequencesQuery.isLoading);
+    if (sequencesQuery.error) {
+      setError(sequencesQuery.error.message);
+    }
+  }, [sequencesQuery.data, sequencesQuery.isLoading, sequencesQuery.error]);
+
+  const loadSequences = useCallback(async () => {
+    await sequencesQuery.refetch();
+  }, [sequencesQuery]);
+
+  const saveSequence = useCallback(async (sequence: {
+    journalistEmail: string;
+    originalSubject: string;
+    originalContent?: string;
+    step?: number;
+    nextSendAt?: string;
+    status?: string;
+  }) => {
+    try {
+      const result = await saveMutation.mutateAsync(sequence);
+      await sequencesQuery.refetch();
+      return result.id;
+    } catch (err: any) {
+      console.error('[D1] Error saving follow-up sequence:', err);
+      throw err;
+    }
+  }, [saveMutation, sequencesQuery]);
+
+  const cancelByEmail = useCallback(async (email: string) => {
+    try {
+      await cancelMutation.mutateAsync({ email });
+      await sequencesQuery.refetch();
+    } catch (err: any) {
+      console.error('[D1] Error cancelling follow-ups:', err);
+      throw err;
+    }
+  }, [cancelMutation, sequencesQuery]);
+
+  return { sequences, loading, error, refresh: loadSequences, save: saveSequence, cancelByEmail };
 }

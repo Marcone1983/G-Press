@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
+import { useCustomJournalists } from "@/hooks/use-d1-storage";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { ThemedText } from "@/components/themed-text";
@@ -113,6 +114,14 @@ export default function ContactsScreen() {
   const [outletToScrape, setOutletToScrape] = useState("");
   const [scraping, setScraping] = useState(false);
   
+  // CSV Import with category selection
+  const [showCsvCategoryModal, setShowCsvCategoryModal] = useState(false);
+  const [pendingCsvFile, setPendingCsvFile] = useState<any>(null);
+  const [selectedCsvCategory, setSelectedCsvCategory] = useState("general");
+  
+  // D1 storage hook for persistent data
+  const d1Journalists = useCustomJournalists();
+  
   // Edit contact state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Journalist | null>(null);
@@ -126,25 +135,48 @@ export default function ContactsScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
 
-  // Load journalists on mount
+  // Load journalists on mount - sync with D1
   useEffect(() => {
     loadJournalists();
-  }, []);
+  }, [d1Journalists.journalists]);
 
   const loadJournalists = async () => {
     setIsLoading(true);
     try {
       // Load static data
       const staticData = journalistsData as Journalist[];
-      
-      // Load custom journalists from AsyncStorage
-      const customData = await AsyncStorage.getItem(STORAGE_KEY);
-      const custom = customData ? JSON.parse(customData) : [];
-      
       setJournalists(staticData);
-      setCustomJournalists(custom);
+      
+      // Use D1 journalists if available, otherwise fallback to AsyncStorage
+      if (d1Journalists.journalists.length > 0) {
+        // Convert D1 format to local format
+        const d1Custom = d1Journalists.journalists.map(j => ({
+          id: j.id,
+          name: j.name,
+          email: j.email,
+          outlet: j.outlet || 'Importato',
+          country: j.country || 'Internazionale',
+          category: j.category || 'general',
+          active: !j.isBlacklisted,
+          isCustom: true,
+        }));
+        setCustomJournalists(d1Custom);
+        // Also update local cache
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(d1Custom));
+      } else {
+        // Fallback to AsyncStorage
+        const customData = await AsyncStorage.getItem(STORAGE_KEY);
+        const custom = customData ? JSON.parse(customData) : [];
+        setCustomJournalists(custom);
+      }
     } catch (error) {
       console.error("Error loading journalists:", error);
+      // Fallback to AsyncStorage on error
+      try {
+        const customData = await AsyncStorage.getItem(STORAGE_KEY);
+        const custom = customData ? JSON.parse(customData) : [];
+        setCustomJournalists(custom);
+      } catch {}
     } finally {
       setIsLoading(false);
     }
@@ -172,9 +204,20 @@ export default function ContactsScreen() {
       isCustom: true,
     };
     
-    const updatedCustom = [...customJournalists, newJournalist];
-    
     try {
+      // Save to D1 first
+      await d1Journalists.save({
+        name: newJournalist.name,
+        email: newJournalist.email,
+        outlet: newJournalist.outlet,
+        country: newJournalist.country,
+        category: newJournalist.category,
+        isVip: false,
+        isBlacklisted: false,
+      });
+      
+      // Also save to local cache
+      const updatedCustom = [...customJournalists, newJournalist];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
       setCustomJournalists(updatedCustom);
       
@@ -187,9 +230,18 @@ export default function ContactsScreen() {
       setShowAddModal(false);
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Successo", `${newJournalist.name} aggiunto al database!`);
+      Alert.alert("Successo", `${newJournalist.name} aggiunto al database cloud!`);
     } catch (error) {
-      Alert.alert("Errore", "Impossibile salvare il contatto");
+      console.error('Error saving journalist:', error);
+      // Fallback to local only
+      try {
+        const updatedCustom = [...customJournalists, newJournalist];
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
+        setCustomJournalists(updatedCustom);
+        Alert.alert("Salvato localmente", "Contatto salvato solo localmente (sync cloud fallita)");
+      } catch {
+        Alert.alert("Errore", "Impossibile salvare il contatto");
+      }
     }
   };
 
@@ -259,7 +311,7 @@ export default function ContactsScreen() {
     }
   };
 
-  // Import CSV function
+  // Import CSV function - Step 1: Pick file and show category modal
   const importCSV = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -271,12 +323,32 @@ export default function ContactsScreen() {
         return;
       }
 
-      setImporting(true);
       const file = result.assets[0];
       
-      // Extract category from filename (e.g., "Holders.csv" -> "holders")
+      // Extract suggested category from filename
       const fileName = file.name || "";
-      const fileCategory = fileName.replace(/\.csv$/i, "").toLowerCase().trim() || "general";
+      const suggestedCategory = fileName.replace(/\.csv$/i, "").toLowerCase().trim() || "general";
+      
+      // Set pending file and show category selection modal
+      setPendingCsvFile(file);
+      setSelectedCsvCategory(suggestedCategory);
+      setShowCsvCategoryModal(true);
+    } catch (error: any) {
+      console.error("CSV pick error:", error);
+      Alert.alert("Errore", "Impossibile selezionare il file");
+    }
+  };
+  
+  // Import CSV function - Step 2: Process file with selected category
+  const processCsvImport = async () => {
+    if (!pendingCsvFile) return;
+    
+    setShowCsvCategoryModal(false);
+    setImporting(true);
+    
+    try {
+      const file = pendingCsvFile;
+      const fileCategory = selectedCsvCategory;
       
       // Read file content
       const content = await FileSystem.readAsStringAsync(file.uri);
@@ -348,24 +420,46 @@ export default function ContactsScreen() {
           `${duplicates} duplicati, ${invalid} email non valide`
         );
         setImporting(false);
+        setPendingCsvFile(null);
         return;
       }
 
-      // Save to AsyncStorage
+      // Save to D1 cloud database
+      let savedToCloud = 0;
+      for (const contact of newContacts) {
+        try {
+          await d1Journalists.save({
+            name: contact.name,
+            email: contact.email,
+            outlet: contact.outlet,
+            country: contact.country,
+            category: contact.category,
+            isVip: false,
+            isBlacklisted: false,
+          });
+          savedToCloud++;
+        } catch (err) {
+          console.error('Error saving to D1:', err);
+        }
+      }
+      
+      // Also save to local cache
       const updatedCustom = [...customJournalists, ...newContacts];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCustom));
       setCustomJournalists(updatedCustom);
+      setPendingCsvFile(null);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         "Importazione completata!",
-        `✅ ${newContacts.length} nuovi contatti importati\n⏭️ ${duplicates} duplicati saltati\n❌ ${invalid} email non valide`
+        `✅ ${newContacts.length} nuovi contatti importati\n☁️ ${savedToCloud} salvati nel cloud\n⏭️ ${duplicates} duplicati saltati\n❌ ${invalid} email non valide\n📁 Categoria: ${fileCategory}`
       );
     } catch (error: any) {
       console.error("Import error:", error);
       Alert.alert("Errore", "Impossibile importare il file: " + (error.message || "Errore sconosciuto"));
     } finally {
       setImporting(false);
+      setPendingCsvFile(null);
     }
   };
 
@@ -972,6 +1066,97 @@ export default function ContactsScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* CSV Category Selection Modal */}
+      <Modal
+        visible={showCsvCategoryModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowCsvCategoryModal(false);
+          setPendingCsvFile(null);
+        }}
+      >
+        <View style={[styles.modalContainer, { paddingTop: Math.max(insets.top, 20) }]}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => {
+              setShowCsvCategoryModal(false);
+              setPendingCsvFile(null);
+            }}>
+              <ThemedText style={styles.modalCancel}>Annulla</ThemedText>
+            </Pressable>
+            <ThemedText style={styles.modalTitle}>Seleziona Categoria</ThemedText>
+            <Pressable onPress={processCsvImport}>
+              <ThemedText style={styles.modalSave}>Importa</ThemedText>
+            </Pressable>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.csvCategoryInfo}>
+              <ThemedText style={styles.csvCategoryInfoIcon}>📂</ThemedText>
+              <ThemedText style={styles.csvCategoryInfoText}>
+                File: {pendingCsvFile?.name || 'Nessun file'}
+              </ThemedText>
+            </View>
+            
+            <ThemedText style={styles.formLabel}>Assegna categoria ai contatti:</ThemedText>
+            <View style={styles.categoryGrid}>
+              {CATEGORY_OPTIONS.map(cat => (
+                <Pressable
+                  key={cat.value}
+                  style={[
+                    styles.categoryOption,
+                    selectedCsvCategory === cat.value && styles.categoryOptionActive,
+                  ]}
+                  onPress={() => setSelectedCsvCategory(cat.value)}
+                >
+                  <ThemedText style={[
+                    styles.categoryOptionText,
+                    selectedCsvCategory === cat.value && styles.categoryOptionTextActive,
+                  ]}>
+                    {cat.label}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              {/* Custom category option */}
+              <Pressable
+                style={[
+                  styles.categoryOption,
+                  !CATEGORY_OPTIONS.find(c => c.value === selectedCsvCategory) && styles.categoryOptionActive,
+                ]}
+                onPress={() => {
+                  // Alert.prompt is iOS only, show current category on Android
+                  if (Platform.OS === 'ios' && (Alert as any).prompt) {
+                    (Alert as any).prompt(
+                      'Categoria Personalizzata',
+                      'Inserisci il nome della categoria:',
+                      (text: string) => text && setSelectedCsvCategory(text.toLowerCase().trim()),
+                      'plain-text',
+                      selectedCsvCategory
+                    );
+                  } else {
+                    Alert.alert('Categoria', `Categoria attuale: ${selectedCsvCategory}\n\nPer cambiare categoria, seleziona una delle opzioni sopra.`);
+                  }
+                }}
+              >
+                <ThemedText style={[
+                  styles.categoryOptionText,
+                  !CATEGORY_OPTIONS.find(c => c.value === selectedCsvCategory) && styles.categoryOptionTextActive,
+                ]}>
+                  {CATEGORY_OPTIONS.find(c => c.value === selectedCsvCategory) ? '+ Altra' : selectedCsvCategory}
+                </ThemedText>
+              </Pressable>
+            </View>
+            
+            <View style={styles.csvCategoryNote}>
+              <ThemedText style={styles.csvCategoryNoteText}>
+                💡 Se il CSV contiene una colonna "categoria", verrà usata quella per ogni riga.
+                Altrimenti tutti i contatti avranno la categoria selezionata sopra.
+              </ThemedText>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -1361,5 +1546,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#2E7D32",
     fontWeight: "500",
+  },
+  
+  // CSV Category Modal
+  csvCategoryInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E3F2FD",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  csvCategoryInfoIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  csvCategoryInfoText: {
+    fontSize: 14,
+    color: "#1976D2",
+    flex: 1,
+  },
+  csvCategoryNote: {
+    backgroundColor: "#FFF8E1",
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  csvCategoryNoteText: {
+    fontSize: 13,
+    color: "#F57C00",
+    lineHeight: 20,
   },
 });
