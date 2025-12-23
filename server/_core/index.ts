@@ -51,6 +51,19 @@ async function startServer() {
     next();
   });
 
+  // Middleware per i webhook che richiedono il body raw
+  app.use("/api/webhooks", express.raw({ type: "application/json" }), (req, res, next) => {
+    // Aggiunge il body raw a req.rawBody per l'uso nel webhook handler
+    req.rawBody = req.body;
+    // Riconverte il body in JSON per il normale flusso di elaborazione
+    try {
+      req.body = JSON.parse(req.rawBody.toString());
+    } catch (e) {
+      // Se non è JSON, lo lasciamo come rawBody e l'handler se ne occuperà
+    }
+    next();
+  });
+
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 

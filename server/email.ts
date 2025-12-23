@@ -1,10 +1,8 @@
 import * as db from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
-import { scheduleFollowUpsForAll } from "./follow-up.js";
-
-// Email sending configuration
+import { scheduleFollowUpsForAll } from "./follow-up.js"import { sendEmailUtility } from "./email-utility.js";guration
 // For production, integrate with Resend, SendGrid, or AWS SES
-// For now, we use a simulated send that logs and updates status
+// Now using the consolidated email utility with Resend integration
 
 interface SendResult {
   success: boolean;
@@ -191,45 +189,12 @@ async function sendEmail(options: {
   subject: string;
   html: string;
 }): Promise<boolean> {
-  // Check if we have an email API key configured
-  const resendApiKey = process.env.RESEND_API_KEY;
-  
-  if (resendApiKey) {
-    // Use Resend API
-    try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "G-Press <noreply@gpress.app>",
-          to: options.to,
-          subject: options.subject,
-          html: options.html,
-        }),
-      });
-      
-      if (response.ok) {
-        console.log(`[Email] Sent to ${options.to}`);
-        return true;
-      } else {
-        const error = await response.text();
-        console.error(`[Email] Failed to send to ${options.to}:`, error);
-        return false;
-      }
-    } catch (error) {
-      console.error(`[Email] Error sending to ${options.to}:`, error);
-      return false;
-    }
-  } else {
-    // Simulated send for development/demo
-    console.log(`[Email] SIMULATED send to ${options.to}: ${options.subject}`);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return true;
-  }
+  const result = await sendEmailUtility({
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+  });
+  return result.success;
 }
 
 /**
@@ -256,71 +221,5 @@ export async function sendBulkEmails(options: {
   failed: number;
   errors: string[];
 }> {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const result = {
-    success: false,
-    sent: 0,
-    failed: 0,
-    errors: [] as string[],
-  };
-
-  if (!resendApiKey) {
-    result.errors.push("RESEND_API_KEY not configured");
-    result.failed = options.to.length;
-    return result;
-  }
-
-  const { to, subject, html, from = "Roberto Romagnino <g.ceo@growverse.net>", attachments } = options;
-
-  // Send in batches of 50
-  const BATCH_SIZE = 50;
-  const batches: string[][] = [];
-  
-  for (let i = 0; i < to.length; i += BATCH_SIZE) {
-    batches.push(to.slice(i, i + BATCH_SIZE));
-  }
-
-  for (const batch of batches) {
-    try {
-      const requestBody: any = {
-        from,
-        to: batch,
-        subject,
-        html,
-      };
-
-      if (attachments && attachments.length > 0) {
-        requestBody.attachments = attachments;
-      }
-
-      console.log(`[Email] Sending to ${batch.length} recipients...`);
-
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`[Email] Success:`, data);
-        result.sent += batch.length;
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(`[Email] Failed:`, errorData);
-        result.failed += batch.length;
-        result.errors.push(errorData.message || `HTTP ${response.status}`);
-      }
-    } catch (error: any) {
-      console.error(`[Email] Error:`, error);
-      result.failed += batch.length;
-      result.errors.push(error.message || "Network error");
-    }
-  }
-
-  result.success = result.failed === 0;
-  return result;
+  return sendEmailUtility(options);
 }

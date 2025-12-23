@@ -64,46 +64,18 @@ function buildFollowUpEmail(
   `.trim();
 }
 
-// Email sending function
+import { sendEmailUtility } from "./email-utility.js";
 async function sendFollowUpEmail(options: {
   to: string;
   subject: string;
   html: string;
 }): Promise<boolean> {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  
-  if (!resendApiKey) {
-    console.log(`[Follow-up] No API key, simulating send to ${options.to}`);
-    return true;
-  }
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM || "Roberto Romagnino <g.ceo@growverse.net>",
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-      }),
-    });
-    
-    if (response.ok) {
-      console.log(`[Follow-up] Email sent to ${options.to}`);
-      return true;
-    } else {
-      const error = await response.text();
-      console.error(`[Follow-up] Failed to send to ${options.to}:`, error);
-      return false;
-    }
-  } catch (error) {
-    console.error(`[Follow-up] Error sending to ${options.to}:`, error);
-    return false;
-  }
+  const result = await sendEmailUtility({
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+  });
+  return result.success;
 }
 
 /**
