@@ -42,7 +42,7 @@ interface Journalist {
   isCustom?: boolean;
 }
 
-const CATEGORIES = [
+const BASE_CATEGORIES = [
   { label: "Tutte", value: "all" },
   { label: "Tech", value: "technology" },
   { label: "Business", value: "business" },
@@ -562,6 +562,27 @@ export default function ContactsScreen() {
   const allJournalists = useMemo(() => {
     return [...customJournalists, ...journalists];
   }, [journalists, customJournalists]);
+
+  // Dynamic categories - include custom categories from imported CSV
+  const CATEGORIES = useMemo(() => {
+    const baseValues = BASE_CATEGORIES.map(c => c.value);
+    const customCategories = new Set<string>();
+    
+    // Extract unique categories from all journalists
+    allJournalists.forEach(j => {
+      if (j.category && !baseValues.includes(j.category.toLowerCase())) {
+        customCategories.add(j.category);
+      }
+    });
+    
+    // Add custom categories to the list
+    const dynamicCategories = Array.from(customCategories).map(cat => ({
+      label: cat.charAt(0).toUpperCase() + cat.slice(1),
+      value: cat,
+    }));
+    
+    return [...BASE_CATEGORIES, ...dynamicCategories];
+  }, [allJournalists]);
 
   // Filter by category and search
   const filteredJournalists = useMemo(() => {

@@ -643,11 +643,17 @@ export default function HomeScreen() {
                   const newActive = !autonomousStatus.data?.active;
                   setAutonomousActive.mutate({ active: newActive }, {
                     onSuccess: () => {
+                      // Refetch status to update UI immediately
+                      autonomousStatus.refetch();
                       Haptics.notificationAsync(
                         newActive 
                           ? Haptics.NotificationFeedbackType.Success 
                           : Haptics.NotificationFeedbackType.Warning
                       );
+                    },
+                    onError: (error) => {
+                      console.error('[Autopilot] Toggle error:', error);
+                      Alert.alert('Errore', 'Impossibile cambiare stato autopilota');
                     }
                   });
                 }}

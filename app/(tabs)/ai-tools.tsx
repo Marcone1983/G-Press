@@ -46,7 +46,7 @@ interface TrainingExample {
   createdAt: string;
 }
 
-type ActiveTab = 'search' | 'factcheck' | 'revision' | 'streaming' | 'finetune';
+type ActiveTab = 'search' | 'factcheck' | 'revision' | 'streaming' | 'finetune' | 'viralita' | 'retargeting';
 
 export default function AIToolsScreen() {
   const insets = useSafeAreaInsets();
@@ -424,6 +424,8 @@ export default function AIToolsScreen() {
             { id: 'revision' as ActiveTab, label: '✏️ Revisione', icon: '✏️' },
             { id: 'streaming' as ActiveTab, label: '⚡ Streaming', icon: '⚡' },
             { id: 'finetune' as ActiveTab, label: '🎯 Fine-Tune', icon: '🎯' },
+            { id: 'viralita' as ActiveTab, label: '🔥 Viralità', icon: '🔥' },
+            { id: 'retargeting' as ActiveTab, label: '🎯 Retargeting', icon: '🎯' },
           ].map(tab => (
             <Pressable
               key={tab.id}
@@ -758,6 +760,129 @@ export default function AIToolsScreen() {
                 ))}
               </View>
             )}
+          </View>
+        )}
+
+        {/* VIRALITÀ PREDITTIVA */}
+        {activeTab === 'viralita' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🔥 Viralità Predittiva</Text>
+            <Text style={styles.sectionSubtitle}>
+              Analizza il potenziale virale del tuo articolo prima dell'invio
+            </Text>
+            
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={articleToCheck}
+              onChangeText={setArticleToCheck}
+              placeholder="Incolla qui il tuo articolo per analizzare il potenziale virale..."
+              multiline
+              numberOfLines={8}
+            />
+            
+            <Pressable
+              style={[styles.button, isLoading && styles.buttonDisabled]}
+              onPress={async () => {
+                if (!articleToCheck.trim()) {
+                  Alert.alert('Errore', 'Inserisci un articolo da analizzare');
+                  return;
+                }
+                setIsLoading(true);
+                try {
+                  const response = await fetch('/api/trpc/viralita.analyzeContent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ json: { content: articleToCheck } }),
+                  });
+                  const data = await response.json();
+                  if (data.result?.data?.json) {
+                    const result = data.result.data.json;
+                    Alert.alert(
+                      `🔥 Score Viralità: ${result.viralityScore}/100`,
+                      `Categoria: ${result.category}\nTiming ottimale: ${result.optimalTiming}\n\nFattori positivi:\n${result.factors?.positive?.join('\n') || 'N/A'}\n\nFattori negativi:\n${result.factors?.negative?.join('\n') || 'N/A'}`
+                    );
+                  }
+                } catch (error: any) {
+                  Alert.alert('Errore', error.message || 'Impossibile analizzare');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>🔥 Analizza Viralità</Text>
+              )}
+            </Pressable>
+
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>💡 Come funziona</Text>
+              <Text style={styles.infoText}>
+                L'AI analizza il tuo articolo considerando:\n
+                • Titolo accattivante e hook emotivo\n
+                • Rilevanza rispetto ai trend attuali\n
+                • Struttura e leggibilità\n
+                • Potenziale di condivisione\n
+                • Timing ottimale per l'invio
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* RETARGETING INTELLIGENTE */}
+        {activeTab === 'retargeting' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🎯 Retargeting Intelligente</Text>
+            <Text style={styles.sectionSubtitle}>
+              Strategie AI per ri-coinvolgere giornalisti che non hanno aperto
+            </Text>
+            
+            <Pressable
+              style={[styles.button, isLoading && styles.buttonDisabled]}
+              onPress={async () => {
+                setIsLoading(true);
+                try {
+                  const response = await fetch('/api/trpc/retargeting.generateStrategy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ json: {} }),
+                  });
+                  const data = await response.json();
+                  if (data.result?.data?.json) {
+                    const result = data.result.data.json;
+                    Alert.alert(
+                      '🎯 Strategia Retargeting',
+                      `Giornalisti da ri-contattare: ${result.targetCount || 0}\n\nStrategia consigliata:\n${result.strategy || 'Nessuna strategia disponibile'}\n\nTiming suggerito: ${result.suggestedTiming || 'N/A'}`
+                    );
+                  }
+                } catch (error: any) {
+                  Alert.alert('Errore', error.message || 'Impossibile generare strategia');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>🎯 Genera Strategia Retargeting</Text>
+              )}
+            </Pressable>
+
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>💡 Retargeting Intelligente</Text>
+              <Text style={styles.infoText}>
+                L'AI identifica:\n
+                • Giornalisti che non hanno aperto le email\n
+                • Pattern di engagement passati\n
+                • Migliori orari per il re-invio\n
+                • Oggetti email alternativi\n
+                • Contenuti personalizzati per ogni segmento
+              </Text>
+            </View>
           </View>
         )}
 
@@ -1179,5 +1304,24 @@ const styles = StyleSheet.create({
   modelOptionTextActive: {
     color: '#fff',
     fontWeight: '600',
+  },
+  infoCard: {
+    marginTop: 24,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 20,
   },
 });

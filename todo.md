@@ -388,3 +388,24 @@
 - [ ] Integrare Retargeting Intelligente nell'UI
 - [ ] Integrare Self-Healing Audit nell'UI
 - [ ] Integrare Predictive Trend Analysis nell'Autopilota
+
+
+## BUG CRITICI SEGNALATI DALL'UTENTE (DA FIXARE ORA)
+- [ ] **AUTOPILOTA TOGGLE NON FUNZIONA** - Rimane sempre OFF anche cliccando
+- [ ] **CATEGORIA CSV NON APPARE NEI FILTRI** - "Holders" non appare nella lista categorie (Salute, Sport, Politica, Generale) nella Home
+- [ ] **CATEGORIA CSV NON APPARE NEI CONTATTI** - "Holders" non appare nei filtri categoria nella sezione Contatti
+- [ ] **DEPLOY VERCEL NON AGGIORNATO** - Le modifiche al server non sono state deployate su Vercel
+- [ ] **VIRALITÀ PREDITTIVA NON INTEGRATA NELL'UI** - API esiste ma non c'è UI
+- [ ] **RETARGETING INTELLIGENTE NON INTEGRATO NELL'UI** - API esiste ma non c'è UI
+- [ ] **SELF-HEALING NON INTEGRATO NELL'UI** - API esiste ma non c'è UI
+- [ ] **PREDICTIVE TREND NON INTEGRATO NELL'AUTOPILOTA** - API esiste ma non usata
+
+## AZIONI IMMEDIATE DA FARE
+1. Fixare toggle Autopilota con refetch dopo mutazione
+2. Aggiungere categoria CSV dinamica ai filtri Home
+3. Aggiungere categoria CSV dinamica ai filtri Contatti
+4. Integrare Viralità Predittiva nell'UI prima dell'invio
+5. Integrare Retargeting nell'UI Contatti
+6. Integrare Self-Healing in Settings
+7. Integrare Predictive Trend nell'Autopilota
+8. Push su GitHub e verificare deploy Vercel
