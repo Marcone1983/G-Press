@@ -600,17 +600,17 @@ export const appRouter = router({
   // ============================================
   cloudflare: router({
     // Inizializza database (crea tabelle se non esistono)
-    init: protectedProcedure.mutation(async () => {
+    init: publicProcedure.mutation(async () => {
       return d1.initializeDatabase();
     }),
 
     // ---- KNOWLEDGE BASE ----
     documents: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllDocuments();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           title: z.string(),
           content: z.string(),
@@ -623,7 +623,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteDocument(input.id);
@@ -632,11 +632,11 @@ export const appRouter = router({
 
     // ---- FINE-TUNING Q&A ----
     qa: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllQA();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           question: z.string(),
           answer: z.string(),
@@ -647,7 +647,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteQA(input.id);
@@ -656,11 +656,11 @@ export const appRouter = router({
 
     // ---- PRESS RELEASES ----
     pressReleases: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllPressReleases();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           title: z.string(),
           content: z.string(),
@@ -676,11 +676,11 @@ export const appRouter = router({
 
     // ---- EMAIL TRACKING ----
     tracking: router({
-      stats: protectedProcedure.query(async () => {
+      stats: publicProcedure.query(async () => {
         return d1.getEmailStats();
       }),
       
-      track: protectedProcedure
+      track: publicProcedure
         .input(z.object({
           pressReleaseId: z.number().optional(),
           journalistEmail: z.string(),
@@ -695,11 +695,11 @@ export const appRouter = router({
 
     // ---- AUTOPILOT STATE ----
     autopilot: router({
-      status: protectedProcedure.query(async () => {
+      status: publicProcedure.query(async () => {
         return d1.getAutopilotState();
       }),
       
-      update: protectedProcedure
+      update: publicProcedure
         .input(z.object({
           isActive: z.boolean().optional(),
           trendsAnalyzed: z.number().optional(),
@@ -713,13 +713,13 @@ export const appRouter = router({
 
     // ---- JOURNALIST RANKINGS ----
     rankings: router({
-      top: protectedProcedure
+      top: publicProcedure
         .input(z.object({ limit: z.number().optional() }).optional())
         .query(async ({ input }) => {
           return d1.getTopJournalists(input?.limit || 50);
         }),
       
-      update: protectedProcedure
+      update: publicProcedure
         .input(z.object({
           email: z.string(),
           name: z.string().optional(),
@@ -734,7 +734,7 @@ export const appRouter = router({
 
     // ---- SUCCESSFUL ARTICLES CACHE ----
     cache: router({
-      list: protectedProcedure
+      list: publicProcedure
         .input(z.object({
           category: z.string().optional(),
           limit: z.number().optional(),
@@ -743,7 +743,7 @@ export const appRouter = router({
           return d1.getSuccessfulArticlesFromCache(input?.category, input?.limit || 10);
         }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           title: z.string(),
           content: z.string(),
@@ -760,7 +760,7 @@ export const appRouter = router({
 
     // ---- SEND PATTERNS (LEARNING) ----
     patterns: router({
-      bestTime: protectedProcedure
+      bestTime: publicProcedure
         .input(z.object({
           country: z.string().optional(),
           category: z.string().optional(),
@@ -769,11 +769,11 @@ export const appRouter = router({
           return d1.getBestSendTime(input?.country, input?.category);
         }),
       
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllSendPatterns();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           country: z.string().optional(),
           category: z.string().optional(),
@@ -836,11 +836,11 @@ export const appRouter = router({
 
     // ---- EMAIL TEMPLATES ----
     templates: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllEmailTemplates();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           name: z.string(),
           subject: z.string().optional(),
@@ -852,7 +852,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteEmailTemplate(input.id);
@@ -861,11 +861,11 @@ export const appRouter = router({
 
     // ---- TRAINING EXAMPLES ----
     trainingExamples: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllTrainingExamples();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           prompt: z.string(),
           completion: z.string(),
@@ -876,7 +876,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteTrainingExample(input.id);
@@ -885,15 +885,15 @@ export const appRouter = router({
 
     // ---- FOLLOW-UP SEQUENCES ----
     followups: router({
-      list: protectedProcedure.query(async () => {
+      list: publicProcedure.query(async () => {
         return d1.getAllFollowupSequences();
       }),
       
-      pending: protectedProcedure.query(async () => {
+      pending: publicProcedure.query(async () => {
         return d1.getPendingFollowups();
       }),
       
-      save: protectedProcedure
+      save: publicProcedure
         .input(z.object({
           journalistEmail: z.string(),
           originalSubject: z.string(),
@@ -907,7 +907,7 @@ export const appRouter = router({
           return { success: !!id, id };
         }),
       
-      update: protectedProcedure
+      update: publicProcedure
         .input(z.object({
           id: z.number(),
           step: z.number().optional(),
@@ -919,13 +919,13 @@ export const appRouter = router({
           return d1.updateFollowupSequence(id, updates);
         }),
       
-      delete: protectedProcedure
+      delete: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
           return d1.deleteFollowupSequence(input.id);
         }),
       
-      cancelByEmail: protectedProcedure
+      cancelByEmail: publicProcedure
         .input(z.object({ email: z.string() }))
         .mutation(async ({ input }) => {
           return d1.cancelFollowupByEmail(input.email);
@@ -934,17 +934,17 @@ export const appRouter = router({
 
     // ---- APP SETTINGS ----
     settings: router({
-      get: protectedProcedure
+      get: publicProcedure
         .input(z.object({ key: z.string() }))
         .query(async ({ input }) => {
           return d1.getSetting(input.key);
         }),
       
-      getAll: protectedProcedure.query(async () => {
+      getAll: publicProcedure.query(async () => {
         return d1.getAllSettings();
       }),
       
-      set: protectedProcedure
+      set: publicProcedure
         .input(z.object({
           key: z.string(),
           value: z.string(),
@@ -956,7 +956,7 @@ export const appRouter = router({
 
     // ---- EMAIL TRACKING HISTORY ----
     trackingHistory: router({
-      list: protectedProcedure
+      list: publicProcedure
         .input(z.object({ limit: z.number().optional() }).optional())
         .query(async ({ input }) => {
           return d1.getEmailTrackingHistory(input?.limit || 100);
@@ -965,15 +965,15 @@ export const appRouter = router({
 
     // ---- BACKUP & RESTORE ----
     backup: router({
-      create: protectedProcedure.mutation(async () => {
+      create: publicProcedure.mutation(async () => {
         return backup.createFullBackup();
       }),
       
-      exportJSON: protectedProcedure.query(async () => {
+      exportJSON: publicProcedure.query(async () => {
         return backup.exportBackupAsJSON();
       }),
       
-      restore: protectedProcedure
+      restore: publicProcedure
         .input(z.any())
         .mutation(async ({ input }) => {
           const validation = backup.validateBackup(input);
@@ -983,7 +983,7 @@ export const appRouter = router({
           return backup.restoreFromBackup(input);
         }),
       
-      validate: protectedProcedure
+      validate: publicProcedure
         .input(z.any())
         .query(({ input }) => {
           return backup.validateBackup(input);
